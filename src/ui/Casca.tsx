@@ -27,13 +27,14 @@ export function useCasca(): Contexto {
   return ctx;
 }
 
-type Chave = "inicio" | "agenda" | "novo" | "tutores";
+type Chave = "inicio" | "agenda" | "novo" | "tutores" | "usuarios";
 
 const ITENS: Record<Chave, { rotulo: string; curto: string; href: string; icone: string }> = {
   inicio: { rotulo: "Início", curto: "Início", href: "/inicio", icone: CAMINHOS.inicio },
   agenda: { rotulo: "Agenda", curto: "Agenda", href: "/agenda", icone: CAMINHOS.agenda },
   novo: { rotulo: "Novo agendamento", curto: "Agendar", href: "/agenda/novo", icone: CAMINHOS.novo },
   tutores: { rotulo: "Tutores e animais", curto: "Tutores", href: "/tutores", icone: CAMINHOS.tutores },
+  usuarios: { rotulo: "Usuários e perfis", curto: "Usuários", href: "/usuarios", icone: CAMINHOS.usuarios },
 };
 
 function itensDoMenu(p: Permissoes): Chave[] {
@@ -42,6 +43,7 @@ function itensDoMenu(p: Permissoes): Chave[] {
   chaves.push("agenda");
   if (p.agendar) chaves.push("novo");
   chaves.push("tutores");
+  if (p.usuarios) chaves.push("usuarios");
   return chaves;
 }
 
@@ -49,6 +51,7 @@ function ativa(caminho: string): Chave {
   if (caminho.startsWith("/agenda/novo")) return "novo";
   if (caminho.startsWith("/agenda")) return "agenda";
   if (caminho.startsWith("/tutores")) return "tutores";
+  if (caminho.startsWith("/usuarios")) return "usuarios";
   return "inicio";
 }
 
@@ -105,6 +108,9 @@ export function Casca({ sessao, permissoes, children }: { sessao: Sessao; permis
                   <b>{sessao.nome}</b>
                   <small>{perfil}</small>
                 </div>
+                <Link href="/senha" aria-label="Alterar senha" title="Alterar senha">
+                  <Traco d={CAMINHOS.chave} />
+                </Link>
                 <button type="button" aria-label="Sair" title="Sair" onClick={sair}>
                   <Traco d={CAMINHOS.sair} />
                 </button>
@@ -128,9 +134,10 @@ export function Casca({ sessao, permissoes, children }: { sessao: Sessao; permis
 
 function AbasDoCelular({ chaves, atual, sessao, perfil }: { chaves: Chave[]; atual: Chave; sessao: Sessao; perfil: string }) {
   const [aberto, setAberto] = useState(false);
-  // Como no protótipo: "Novo agendamento" fica no painel "Mais", junto com "Sair".
-  const abas = chaves.filter((k) => k !== "novo");
-  const mais: Chave[] = chaves.filter((k) => k === "novo");
+  // Como no protótipo: o que não cabe na barra fica no painel "Mais", junto com "Sair".
+  const noPainel: Chave[] = ["novo", "usuarios"];
+  const abas = chaves.filter((k) => !noPainel.includes(k));
+  const mais = chaves.filter((k) => noPainel.includes(k));
   const emMais = mais.includes(atual);
 
   return (
@@ -180,6 +187,14 @@ function AbasDoCelular({ chaves, atual, sessao, perfil }: { chaves: Chave[]; atu
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link className="lrow" href="/senha" style={{ color: "#1E2B4A", textDecoration: "none" }}>
+                  <span className="pawbox" style={{ width: 40, height: 40, background: "#E6EBFF", color: "#0B3A8F" }}>
+                    <Traco d={CAMINHOS.chave} />
+                  </span>
+                  <b style={{ flex: 1, textAlign: "left" }}>Alterar senha</b>
+                </Link>
+              </li>
               <li>
                 <button type="button" className="lrow" onClick={sair} style={{ color: "#9B1C1C" }}>
                   <span className="pawbox" style={{ width: 40, height: 40, background: "#FDECEC", color: "#9B1C1C" }}>

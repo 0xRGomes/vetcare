@@ -30,7 +30,7 @@ O repositório já havia sido iniciado como um projeto Next.js com TypeScript. O
 
 1. **Front-end e API em projetos separados.** Descartada: duas implantações e dois processos para uma equipe pequena, contrariando a simplicidade operacional que motivou a ADR-005.
 2. **PostgreSQL ou MySQL.** São as opções naturais para produção, mas exigem instalar e configurar um servidor para rodar o sistema. Como os repositórios isolam o SQL atrás das interfaces do Domínio, a troca futura fica restrita a `src/server/infra/db`.
-3. **ORM (Prisma, Drizzle).** Descartado nesta etapa para não acrescentar geração de código e dependências a um esquema de cinco tabelas.
+3. **ORM (Prisma, Drizzle).** Descartado nesta etapa para não acrescentar geração de código e dependências a um esquema de seis tabelas.
 
 ## Consequências
 

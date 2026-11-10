@@ -36,6 +36,8 @@ export const CAMINHOS = {
   agenda: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4",
   novo: "M4 6h16v14H4zM4 10h16M8 3v4M16 3v4M12 13v5M9.5 15.5h5",
   tutores: "M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 3-5 6-5s6 2 6 5M16 11a3 3 0 1 0 0-6M18 15c2 .5 3 2.5 3 5",
+  usuarios: "M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6zM9 12l2 2 4-4",
+  chave: "M15 9a3 3 0 1 0-6 0 3 3 0 0 0 6 0zM12 12v9M12 17h3M12 20h2",
   sair: "M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10",
   mais: "M12 5v14M5 12h14",
   voltar: "M15 5l-7 7 7 7",

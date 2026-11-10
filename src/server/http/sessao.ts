@@ -15,7 +15,10 @@ async function tokenDaRequisicao(): Promise<string | undefined> {
 
 /** Sessão válida ou erro 401. Usada pelas rotas da API. */
 export async function exigirSessao(): Promise<Sessao> {
-  return servicos().sessoes.validar(await tokenDaRequisicao());
+  // Ler a requisição antes de abrir o banco: durante o `next build` não há requisição,
+  // a leitura interrompe a pré-renderização e o banco não chega a ser tocado.
+  const token = await tokenDaRequisicao();
+  return servicos().sessoes.validar(token);
 }
 
 /** Sessão válida ou null. Usada pelas páginas para decidir redirecionamentos. */

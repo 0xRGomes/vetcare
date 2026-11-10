@@ -82,13 +82,28 @@ A data registrada representa o momento em que a proposta foi formulada, não a d
 
 Esta ADR é um **registro complementar de decisão de escopo de implementação**. Ela não altera automaticamente a arquitetura da Etapa 1 nem substitui suas decisões aceitas.
 
+## Revisão de 10/11/2026 — inclusão do REQ 01
+
+Com os cinco requisitos implementados, o sistema dependia de contas criadas direto no banco de dados, o que o deixava com aparência de protótipo: não havia como dar ou retirar o acesso de alguém pela interface. O recorte foi ampliado para incluir o **REQ 01 — Manter usuário**.
+
+| Requisito | Funcionalidade |
+| --- | --- |
+| REQ 01 | Manter usuário |
+| REQ 02 | Autenticar usuário |
+| REQ 04 | Manter tutor |
+| REQ 05 | Manter animal |
+| REQ 07 | Agendar consulta |
+| REQ 09 | Consultar agenda |
+
+O escopo passa a **6 de 17 requisitos (35,3%)**, ainda dentro de "aproximadamente 30%". A seção "REQ 01 — Manter usuário" acima deixa de valer como restrição: os usuários são mantidos pela tela "Usuários e perfis", e a carga inicial traz apenas as contas necessárias para o primeiro acesso. A restrição do REQ 06 continua: os veterinários são pré-cadastrados.
+
 ## Situação da implementação
 
-Em **10/11/2026** os cinco requisitos deste recorte foram implementados no repositório, seguindo o fluxo descrito acima. A lista de requisitos da Sprint, os critérios de aceite e a rastreabilidade para telas, rotas, serviços e testes estão em [requisitos-sprint.md](../requisitos-sprint.md).
+Em **10/11/2026** os seis requisitos foram implementados no repositório. A lista de requisitos da Sprint, os critérios de aceite e a rastreabilidade para telas, rotas, serviços e testes estão em [requisitos-sprint.md](../requisitos-sprint.md).
 
-As restrições previstas foram mantidas: usuários (REQ 01) e profissionais (REQ 06) são pré-cadastrados na carga inicial de dados, sem telas de manutenção. As tecnologias adotadas e os desvios em relação à arquitetura da Etapa 1 estão registrados nas ADRs [009](ADR-009-tecnologias-de-implementacao.md), [010](ADR-010-detalhamento-da-autenticacao.md) e [011](ADR-011-itens-adiados-e-ajustes-de-interface.md).
+As tecnologias adotadas e os desvios em relação à arquitetura da Etapa 1 estão registrados nas ADRs [009](ADR-009-tecnologias-de-implementacao.md), [010](ADR-010-detalhamento-da-autenticacao.md) e [011](ADR-011-itens-adiados-e-ajustes-de-interface.md).
 
-A implementação não altera o estado desta decisão: a confirmação formal do grupo continua pendente.
+A implementação e esta revisão não alteram o estado da decisão: a confirmação formal do grupo continua pendente.
 
 ## Notas e pontos para revisão
 

@@ -20,7 +20,12 @@ export interface Usuario {
   bloqueadoAte: string | null;
   /** Preenchido quando o usuário é um veterinário da clínica. */
   profissionalId: number | null;
+  /** A senha atual foi gerada pelo administrador e precisa ser trocada no próximo acesso. */
+  senhaProvisoria: boolean;
+  ultimoAcesso: string | null;
 }
+
+export type StatusUsuario = "Ativo" | "Bloqueado" | "Inativo";
 
 /** Dados do usuário autenticado que circulam no token e na interface. */
 export interface Sessao {
@@ -29,6 +34,14 @@ export interface Sessao {
   email: string;
   perfil: Perfil;
   profissionalId: number | null;
+  /** Enquanto for true, o usuário só pode definir a própria senha. */
+  trocarSenha: boolean;
+}
+
+export interface EventoDeAuditoria {
+  id: number;
+  quando: string;
+  descricao: string;
 }
 
 export interface Profissional {

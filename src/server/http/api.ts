@@ -35,6 +35,12 @@ export async function corpoJson(req: NextRequest): Promise<Record<string, unknow
   throw new ErroDeValidacao("Corpo da requisição inválido.");
 }
 
+interface Opcoes {
+  status?: number;
+  /** Rotas que continuam disponíveis enquanto o usuário ainda não trocou a senha provisória. */
+  permitirSenhaProvisoria?: boolean;
+}
+
 interface Contexto {
   req: NextRequest;
   sessao: Sessao;
@@ -42,10 +48,15 @@ interface Contexto {
 }
 
 /** Rota autenticada: valida origem e sessão, executa e converte erros de domínio em respostas HTTP. */
-export async function rotaAutenticada(req: NextRequest, executar: (ctx: Contexto) => unknown | Promise<unknown>, status = 200): Promise<NextResponse> {
+export async function rotaAutenticada(
+  req: NextRequest,
+  executar: (ctx: Contexto) => unknown | Promise<unknown>,
+  { status = 200, permitirSenhaProvisoria = false }: Opcoes = {},
+): Promise<NextResponse> {
   try {
     conferirOrigem(req);
     const sessao = await exigirSessao();
+    if (sessao.trocarSenha && !permitirSenhaProvisoria) throw new ErroAcessoNegado("Defina sua senha antes de continuar.");
     const resultado = await executar({ req, sessao, s: servicos() });
     return NextResponse.json(resultado ?? { ok: true }, { status, headers: { "Cache-Control": "no-store" } });
   } catch (erro) {

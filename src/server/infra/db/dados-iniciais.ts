@@ -1,8 +1,9 @@
 // Camada de Infraestrutura — carga inicial de dados de demonstração.
 //
-// REQ 01 (Manter usuário) e REQ 06 (Manter veterinário) estão fora do escopo da Etapa 2 (ADR-008).
-// Por isso usuários e profissionais são pré-cadastrados aqui, junto com tutores, animais e
-// consultas de exemplo para que a agenda não comece vazia.
+// Contas iniciais: o sistema precisa de ao menos um administrador para que os demais usuários
+// sejam cadastrados pela tela "Usuários e perfis" (REQ 01).
+// REQ 06 (Manter veterinário) está fora do escopo da Etapa 2 (ADR-008): os profissionais são
+// pré-cadastrados aqui, junto com tutores, animais e consultas de exemplo para a agenda não começar vazia.
 
 import type { DatabaseSync } from "node:sqlite";
 import { diaDaSemana, minutos, somarDias } from "@/lib/datas";

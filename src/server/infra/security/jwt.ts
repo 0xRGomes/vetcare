@@ -61,6 +61,7 @@ export const emissorJwt: EmissorDeToken = {
         email: String(payload.email ?? ""),
         perfil,
         profissionalId: typeof payload.profissionalId === "number" ? payload.profissionalId : null,
+        trocarSenha: false, // definido pelo TokenSessionService a partir do banco
       } satisfies Sessao;
     } catch {
       return null;

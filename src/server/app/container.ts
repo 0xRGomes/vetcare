@@ -6,6 +6,7 @@ import { abrirBanco } from "@/server/infra/db/conexao";
 import { bancoVazio, carregarDadosIniciais } from "@/server/infra/db/dados-iniciais";
 import {
   SqliteAnimalRepository,
+  SqliteAuditoriaRepository,
   SqliteConsultaRepository,
   SqliteProfissionalRepository,
   SqliteTutorRepository,
@@ -21,6 +22,7 @@ import { SlotConflictManager } from "./agendamento/SlotConflictManager";
 import { AuthService } from "./auth/AuthService";
 import { RBACManager } from "./auth/RBACManager";
 import { TokenSessionService } from "./auth/TokenSessionService";
+import { UsuarioService } from "./auth/UsuarioService";
 import { AnimalService } from "./cadastros/AnimalService";
 import { ProfissionalService } from "./cadastros/ProfissionalService";
 import { TutorService } from "./cadastros/TutorService";
@@ -49,6 +51,7 @@ export function montarServicos(db: DatabaseSync, relogio: Relogio = relogioDoSis
   const tutores = new SqliteTutorRepository(db);
   const animais = new SqliteAnimalRepository(db);
   const consultas = new SqliteConsultaRepository(db);
+  const auditoria = new SqliteAuditoriaRepository(db);
 
   const rbac = new RBACManager();
   const sessoes = new TokenSessionService(emissorJwt, usuarios);
@@ -57,7 +60,8 @@ export function montarServicos(db: DatabaseSync, relogio: Relogio = relogioDoSis
   return {
     rbac,
     sessoes,
-    auth: new AuthService(usuarios, hashScrypt, sessoes, relogio),
+    auth: new AuthService(usuarios, hashScrypt, sessoes, auditoria, relogio),
+    usuarios: new UsuarioService(usuarios, profissionais, hashScrypt, auditoria, rbac, relogio),
     tutores: new TutorService(tutores, consultas, rbac, relogio),
     animais: new AnimalService(animais, tutores, consultas, rbac, relogio),
     profissionais: new ProfissionalService(profissionais, rbac),

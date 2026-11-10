@@ -5,6 +5,8 @@ import type {
   Animal,
   Consulta,
   ConsultaDetalhada,
+  EventoDeAuditoria,
+  Perfil,
   Profissional,
   Sessao,
   Tutor,
@@ -17,6 +19,26 @@ export interface UsuarioRepository {
   buscarPorId(id: number): Usuario | null;
   registrarFalhaDeLogin(id: number, tentativas: number, bloqueadoAte: string | null): void;
   limparFalhasDeLogin(id: number): void;
+  registrarAcesso(id: number, instante: string): void;
+  listar(busca?: string): Usuario[];
+  buscarPorProfissional(profissionalId: number): Usuario | null;
+  criar(dados: DadosUsuario, senhaHash: string): number;
+  atualizar(id: number, dados: DadosUsuario): void;
+  definirAtivo(id: number, ativo: boolean): void;
+  definirSenha(id: number, senhaHash: string, provisoria: boolean): void;
+  administradoresAtivos(): number;
+}
+
+export interface DadosUsuario {
+  nome: string;
+  email: string;
+  perfil: Perfil;
+  profissionalId: number | null;
+}
+
+export interface AuditoriaRepository {
+  registrar(quando: string, descricao: string): void;
+  recentes(limite: number): EventoDeAuditoria[];
 }
 
 export interface ProfissionalRepository {
@@ -67,6 +89,8 @@ export interface ConsultaRepository {
 export interface HashDeSenha {
   gerar(senha: string): Promise<string>;
   conferir(senha: string, hash: string): Promise<boolean>;
+  /** Senha aleatória para o primeiro acesso de um usuário. */
+  gerarProvisoria(): string;
 }
 
 export interface EmissorDeToken {

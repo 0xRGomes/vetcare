@@ -1,9 +1,17 @@
 "use client";
 
 // REQ 04 — Manter tutor · REQ 05 — Manter animal
+//
+// Cada estado da tela tem endereço próprio:
+//   /tutores                         lista
+//   /tutores/novo                    novo tutor
+//   /tutores/:id                     ficha do tutor
+//   /tutores/:id/editar              editar tutor
+//   /tutores/:id/animais/novo        novo animal
+//   /tutores/:id/animais/:animal     editar animal
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { dataBR, hojeLocal, mesAno } from "@/lib/datas";
 import { api, ErroApi, mensagemDe } from "../api";
@@ -14,9 +22,7 @@ import type { Animal, Tutor } from "../tipos";
 import { useDados } from "../useDados";
 
 type Modo = "ver" | "novo" | "editar";
-
-const TUTOR_VAZIO = { nome: "", cpf: "", telefone: "", email: "", endereco: "", canalWhatsapp: true, canalEmail: true };
-const ANIMAL_VAZIO = { nome: "", especie: "Canina", raca: "", sexo: "Fêmea", nascimento: "" };
+type ErroDeCampo = { campo?: string; texto: string } | null;
 
 function mascaraCpf(valor: string): string {
   const d = valor.replace(/\D/g, "").slice(0, 11);
@@ -36,20 +42,362 @@ function canais(t: Tutor): string {
   return t.canalEmail ? "E-mail" : "Não recebe lembretes";
 }
 
-function useTutores(q: URLSearchParams) {
-  const [busca, setBusca] = useState("");
-  const [termo, setTermo] = useState("");
-  const [selecionado, setSelecionado] = useState<number | null>(() => Number(q.get("tutor")) || null);
-  const [modo, setModo] = useState<Modo>(() => (q.get("novo") ? "novo" : "ver"));
-  const [form, setForm] = useState(TUTOR_VAZIO);
+const descricaoDosPets = (t: Tutor) => (t.animais.length ? t.animais.map((a) => a.nome).join(", ") : "Sem animais cadastrados");
+
+function textoDosVinculados(n: number): string {
+  return n === 0 ? "seu cadastro" : n === 1 ? "o animal vinculado" : `os ${n} animais vinculados`;
+}
+
+/** Interpreta o trecho do endereço depois de /tutores. */
+function lerRota(rota: string[]) {
+  const [a, b, c] = rota;
+  if (a === "novo") return { modo: "novo" as Modo, id: null, animal: null };
+  const id = a ? Number(a) : null;
+  const animal: null | "novo" | number = b === "animais" ? (c === "novo" ? "novo" : Number(c) || null) : null;
+  return { modo: (b === "editar" ? "editar" : "ver") as Modo, id, animal };
+}
+
+// ---------- Formulário do tutor ----------
+
+function FormTutor({ tutor, celular, aoSalvar, aoCancelar }: { tutor: Tutor | null; celular: boolean; aoSalvar: (t: Tutor, criado: boolean) => void; aoCancelar: () => void }) {
+  const novo = tutor === null;
+  const [f, setF] = useState(
+    tutor
+      ? { nome: tutor.nome, cpf: tutor.cpf, telefone: tutor.telefone, email: tutor.email, endereco: tutor.endereco, canalWhatsapp: tutor.canalWhatsapp, canalEmail: tutor.canalEmail }
+      : { nome: "", cpf: "", telefone: "", email: "", endereco: "", canalWhatsapp: true, canalEmail: true },
+  );
   const [erro, setErro] = useState("");
-  const [msg, setMsg] = useState("");
-  const [confirmando, setConfirmando] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  /** Formulário de animal: fechado, novo ou editando o animal de id informado. */
-  const [animalAberto, setAnimalAberto] = useState<null | "novo" | number>(() => (q.get("animal") === "novo" ? "novo" : null));
-  const [formAnimal, setFormAnimal] = useState(ANIMAL_VAZIO);
-  const [erroAnimal, setErroAnimal] = useState<{ campo?: string; texto: string } | null>(null);
+  const titulo = novo ? "Novo tutor" : "Editar tutor";
+  const rotuloSalvar = salvando ? "Salvando…" : novo ? "Cadastrar tutor" : "Salvar alterações";
+
+  async function enviar(e: FormEvent) {
+    e.preventDefault();
+    if (!f.nome.trim() || !f.telefone.trim() || (novo && f.cpf.replace(/\D/g, "").length !== 11)) {
+      setErro("Preencha nome, CPF e telefone. O CPF precisa ter 11 dígitos.");
+      return;
+    }
+    setSalvando(true);
+    setErro("");
+    try {
+      const { tutor: salvo } = await api<{ tutor: Tutor }>(novo ? "/api/tutores" : `/api/tutores/${tutor.id}`, { metodo: novo ? "POST" : "PUT", corpo: f });
+      aoSalvar(salvo, novo);
+    } catch (falha) {
+      setErro(mensagemDe(falha));
+      setSalvando(false);
+    }
+  }
+
+  const texto = (chave: "nome" | "cpf" | "telefone" | "email" | "endereco", valor: string) => setF({ ...f, [chave]: valor });
+  const campos = (
+    <>
+      <div className="field">
+        <label className="lbl" htmlFor="tn">
+          Nome completo
+        </label>
+        <input className="inp" id="tn" autoComplete="off" placeholder="Ex.: Mariana Teixeira" value={f.nome} onChange={(e) => texto("nome", e.target.value)} />
+      </div>
+      <div className="field">
+        <label className="lbl" htmlFor="tc">
+          CPF
+        </label>
+        {novo ? (
+          <input className="inp" id="tc" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={f.cpf} onChange={(e) => texto("cpf", mascaraCpf(e.target.value))} />
+        ) : (
+          <input className="inp" id="tc" value={f.cpf} disabled title="O CPF não pode ser alterado depois do cadastro" />
+        )}
+      </div>
+      <div className="field">
+        <label className="lbl" htmlFor="tt">
+          Telefone / WhatsApp
+        </label>
+        <input className="inp" id="tt" type="tel" inputMode="tel" autoComplete="off" placeholder="(71) 90000-0000" value={f.telefone} onChange={(e) => texto("telefone", mascaraTelefone(e.target.value))} />
+      </div>
+      <div className="field">
+        <label className="lbl" htmlFor="te">
+          E-mail
+        </label>
+        <input className="inp" id="te" type="email" inputMode="email" autoComplete="off" placeholder="nome@email.com" value={f.email} onChange={(e) => texto("email", e.target.value)} />
+      </div>
+    </>
+  );
+  const endereco = (
+    <div className="field">
+      <label className="lbl" htmlFor="ta">
+        Endereço
+      </label>
+      <input className="inp" id="ta" autoComplete="off" placeholder="Rua, número · bairro, cidade" value={f.endereco} onChange={(e) => texto("endereco", e.target.value)} />
+    </div>
+  );
+  const lembretes = (
+    <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
+      <legend className="lbl" style={{ marginBottom: 8, padding: 0 }}>
+        {celular ? "Receber lembretes por" : "Receber lembretes de consultas e vacinas por"}
+      </legend>
+      <div style={celular ? undefined : { display: "flex", gap: 20, flexWrap: "wrap" }}>
+        <label className="check">
+          <input type="checkbox" checked={f.canalWhatsapp} onChange={(e) => setF({ ...f, canalWhatsapp: e.target.checked })} />
+          WhatsApp
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={f.canalEmail} onChange={(e) => setF({ ...f, canalEmail: e.target.checked })} />
+          E-mail
+        </label>
+      </div>
+    </fieldset>
+  );
+  const alerta = erro && (
+    <span role="alert" className="alert">
+      {erro}
+    </span>
+  );
+
+  if (celular) {
+    return (
+      <>
+        <TopoCelular
+          titulo={titulo}
+          esquerda={
+            <button type="button" className="iconbtn" aria-label="Cancelar" onClick={aoCancelar}>
+              <Traco d={CAMINHOS.fechar} size={22} largura={2.2} />
+            </button>
+          }
+        />
+        <main className="page withcta">
+          <div className="eyebrow">REQ 04 · {titulo}</div>
+          <form id="form-tutor" className="stack" aria-label={titulo} noValidate onSubmit={enviar}>
+            {campos}
+            {endereco}
+            {lembretes}
+            {alerta}
+            {novo && <span className="small muted">Depois de salvar, cadastre os animais na ficha do tutor.</span>}
+          </form>
+        </main>
+        <div className="ctabar">
+          <button type="submit" form="form-tutor" className="btn" disabled={salvando}>
+            {rotuloSalvar}
+          </button>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <form aria-label={titulo} className="d-card" style={{ border: "2px solid #3651D9", display: "flex", flexDirection: "column", gap: 16 }} noValidate onSubmit={enviar}>
+      <div>
+        <div className="eyebrow t">REQ 04 · {titulo}</div>
+        <h2 className="h2" style={{ margin: "4px 0 0", fontSize: 28 }}>
+          {titulo}
+        </h2>
+      </div>
+      <div className="d-form2">{campos}</div>
+      {endereco}
+      {lembretes}
+      {alerta}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <button type="submit" className="d-btn" style={{ flex: "0 1 220px", height: 48 }} disabled={salvando}>
+          {rotuloSalvar}
+        </button>
+        <button type="button" className="d-btn2" style={{ flex: "0 1 160px", height: 48 }} onClick={aoCancelar}>
+          Cancelar
+        </button>
+      </div>
+      {novo && <span style={{ fontSize: 14, color: "#5B6782" }}>Depois de salvar, cadastre os animais deste tutor na própria ficha.</span>}
+    </form>
+  );
+}
+
+// ---------- Formulário do animal ----------
+
+function FormAnimal({ tutorId, animal, celular, aoSalvar, aoExcluir }: { tutorId: number; animal: Animal | null; celular: boolean; aoSalvar: (texto: string) => void; aoExcluir: (texto: string) => void }) {
+  const [f, setF] = useState(animal ? { nome: animal.nome, especie: animal.especie as string, raca: animal.raca, sexo: animal.sexo as string, nascimento: animal.nascimento } : { nome: "", especie: "Canina", raca: "", sexo: "Fêmea", nascimento: "" });
+  const [erro, setErro] = useState<ErroDeCampo>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const erroEm = (campo: string) => erro?.campo === campo;
+  const texto = (chave: keyof typeof f, valor: string) => setF({ ...f, [chave]: valor });
+
+  async function enviar(e: FormEvent) {
+    e.preventDefault();
+    if (!f.nome.trim()) return setErro({ campo: "nome", texto: "Informe o nome do animal." });
+    if (!f.nascimento) return setErro({ campo: "nascimento", texto: "Informe a data de nascimento." });
+    if (f.nascimento > hojeLocal()) return setErro({ campo: "nascimento", texto: "A data não pode estar no futuro." });
+    setSalvando(true);
+    setErro(null);
+    try {
+      await api(animal ? `/api/animais/${animal.id}` : `/api/tutores/${tutorId}/animais`, { metodo: animal ? "PUT" : "POST", corpo: f });
+      aoSalvar(animal ? "Dados do animal atualizados." : `${f.nome.trim()} foi cadastrado e vinculado ao tutor.`);
+    } catch (falha) {
+      setErro({ campo: falha instanceof ErroApi ? falha.campo : undefined, texto: mensagemDe(falha) });
+      setSalvando(false);
+    }
+  }
+
+  async function excluir() {
+    if (!animal) return;
+    setSalvando(true);
+    try {
+      await api(`/api/animais/${animal.id}`, { metodo: "DELETE" });
+      aoExcluir(`O cadastro de ${animal.nome} foi excluído.`);
+    } catch (falha) {
+      setErro({ texto: mensagemDe(falha) });
+      setSalvando(false);
+    }
+  }
+
+  const nome = (
+    <div className="field">
+      <label className="lbl" htmlFor="an">
+        Nome do animal
+      </label>
+      <input className="inp" id="an" autoComplete="off" value={f.nome} aria-invalid={erroEm("nome") || undefined} onChange={(e) => texto("nome", e.target.value)} />
+      {erroEm("nome") && <span className="alert s">{erro!.texto}</span>}
+    </div>
+  );
+  const especie = (
+    <div className="field">
+      <label className="lbl" htmlFor="ae">
+        Espécie
+      </label>
+      <select className="inp" id="ae" value={f.especie} onChange={(e) => texto("especie", e.target.value)}>
+        <option>Canina</option>
+        <option>Felina</option>
+        <option>Outra</option>
+      </select>
+    </div>
+  );
+  const raca = (
+    <div className="field">
+      <label className="lbl" htmlFor="ar">
+        Raça
+      </label>
+      <input className="inp" id="ar" autoComplete="off" placeholder="Ex.: Poodle, SRD" value={f.raca} onChange={(e) => texto("raca", e.target.value)} />
+    </div>
+  );
+  const sexo = (
+    <div className="field">
+      <label className="lbl" htmlFor="as">
+        Sexo
+      </label>
+      <select className="inp" id="as" value={f.sexo} onChange={(e) => texto("sexo", e.target.value)}>
+        <option>Fêmea</option>
+        <option>Macho</option>
+      </select>
+    </div>
+  );
+  const nascimento = (
+    <div className="field">
+      <label className="lbl" htmlFor="ad">
+        Data de nascimento
+      </label>
+      <input className="inp" id="ad" type="date" max={hojeLocal()} value={f.nascimento} aria-invalid={erroEm("nascimento") || undefined} aria-describedby="ad-err" onChange={(e) => texto("nascimento", e.target.value)} />
+      {erroEm("nascimento") && (
+        <span id="ad-err" className="alert s">
+          {erro!.texto}
+        </span>
+      )}
+    </div>
+  );
+  const erroGeral = erro && !["nome", "nascimento"].includes(erro.campo ?? "") && (
+    <span role="alert" className="alert" style={{ gridColumn: "1 / -1" }}>
+      {erro.texto}
+    </span>
+  );
+  const b = celular ? { fraco: "btn2", perigo: "btnd", forte: "btnD" } : { fraco: "d-btn2 s14", perigo: "d-btnd s14", forte: "d-btnD s14" };
+  const exclusao =
+    animal &&
+    (excluindo ? (
+      <div className="danger" style={{ gridColumn: "1 / -1" }}>
+        <b>Excluir {animal.nome}?</b>
+        <span className="small">As consultas futuras deste animal serão canceladas. O histórico fica guardado.</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className={b.fraco} style={{ flex: 1 }} onClick={() => setExcluindo(false)}>
+            Manter
+          </button>
+          <button type="button" className={b.forte} style={{ flex: 1 }} disabled={salvando} onClick={excluir}>
+            Excluir
+          </button>
+        </div>
+      </div>
+    ) : (
+      <button type="button" className={b.perigo} onClick={() => setExcluindo(true)}>
+        Excluir animal
+      </button>
+    ));
+  const rotulo = animal ? "Editar animal" : "Cadastrar animal";
+  const salvar = salvando ? "Salvando…" : "Salvar animal";
+
+  if (celular) {
+    return (
+      <form className="card stack" aria-label={rotulo} style={{ border: "2px solid #3651D9" }} noValidate onSubmit={enviar}>
+        <h2 className="h2">{animal ? `Editar ${animal.nome}` : "Novo animal"}</h2>
+        {nome}
+        <div className="grid2">
+          {especie}
+          {sexo}
+        </div>
+        {raca}
+        {nascimento}
+        {erroGeral}
+        <button type="submit" className="btn" disabled={salvando}>
+          {salvar}
+        </button>
+        {exclusao}
+      </form>
+    );
+  }
+
+  return (
+    <form aria-label={rotulo} className="d-form3" style={{ borderTop: "1px solid #DCE3EF", paddingTop: 18 }} noValidate onSubmit={enviar}>
+      <div className="eyebrow t" style={{ gridColumn: "1 / -1" }}>
+        REQ 05 · {animal ? `Editar ${animal.nome}` : "Novo animal"}
+      </div>
+      {nome}
+      {especie}
+      {raca}
+      {sexo}
+      {nascimento}
+      <div style={{ display: "flex", alignItems: "flex-start", paddingTop: 23 }}>
+        <button type="submit" className="d-btn" style={{ width: "100%" }} disabled={salvando}>
+          {salvar}
+        </button>
+      </div>
+      {erroGeral}
+      {exclusao}
+    </form>
+  );
+}
+
+// ---------- Tela ----------
+
+// A página é remontada quando o endereço muda; a busca e a mensagem de sucesso sobrevivem aqui.
+const lembrado: { busca: string; aviso: { caminho: string; texto: string } | null } = { busca: "", aviso: null };
+
+export function Tutores() {
+  const { celular, permissoes } = useCasca();
+  const podeEditar = permissoes.editarCadastros;
+  const router = useRouter();
+  const params = useParams<{ rota?: string[] }>();
+  const lido = lerRota(params.rota ?? []);
+  // Quem só lê os cadastros nunca vê formulários, mesmo digitando o endereço.
+  const rota = podeEditar ? lido : { ...lido, modo: "ver" as Modo, animal: null };
+  const caminho = "/tutores" + (params.rota?.length ? "/" + params.rota.join("/") : "");
+
+  const [busca, definirBusca] = useState(lembrado.busca);
+  const [termo, setTermo] = useState(lembrado.busca.trim());
+  /** Mensagem de sucesso, válida só para o endereço em que deve aparecer. */
+  const [aviso, definirAviso] = useState(() => (lembrado.aviso?.caminho === caminho ? lembrado.aviso : (lembrado.aviso = null)));
+  const setBusca = (valor: string) => {
+    lembrado.busca = valor;
+    definirBusca(valor);
+  };
+  const setAviso = (valor: typeof lembrado.aviso) => {
+    lembrado.aviso = valor;
+    definirAviso(valor);
+  };
+  const [confirmando, setConfirmando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [excluindo, setExcluindo] = useState(false);
 
   useEffect(() => {
     const t = window.setTimeout(() => setTermo(busca.trim()), 250);
@@ -58,501 +406,186 @@ function useTutores(q: URLSearchParams) {
 
   const lista = useDados<{ tutores: Tutor[] }>(`/api/tutores${termo ? `?busca=${encodeURIComponent(termo)}` : ""}`);
   const tutores = lista.dados?.tutores ?? [];
-  const tutor = tutores.find((t) => t.id === selecionado) ?? null;
+  // No desktop, /tutores abre a ficha do primeiro da lista, como no protótipo.
+  const idDaFicha = rota.id ?? (celular || rota.modo === "novo" ? null : (tutores[0]?.id ?? null));
+  const ficha = useDados<{ tutor: Tutor }>(idDaFicha ? `/api/tutores/${idDaFicha}` : null);
+  const t = idDaFicha && ficha.dados?.tutor.id === idDaFicha ? ficha.dados.tutor : null;
+  const naoEncontrado = !!rota.id && !t && !!ficha.erro;
+  const msg = aviso?.caminho === caminho ? aviso.texto : "";
 
-  function limpar() {
-    setErro("");
-    setMsg("");
+  function ir(destino: string, texto = "") {
+    setAviso(texto ? { caminho: destino, texto } : null);
     setConfirmando(false);
-    setAnimalAberto(null);
-    setErroAnimal(null);
+    setErro("");
+    router.push(destino);
+  }
+  const atualizar = () => Promise.all([lista.recarregar(), ficha.recarregar()]);
+
+  async function excluirTutor(alvo: Tutor) {
+    setExcluindo(true);
+    try {
+      const { consultasCanceladas: n } = await api<{ consultasCanceladas: number }>(`/api/tutores/${alvo.id}`, { metodo: "DELETE" });
+      await lista.recarregar();
+      ir("/tutores", `O cadastro de ${alvo.nome} foi excluído.${n ? ` ${n === 1 ? "1 consulta futura foi cancelada" : `${n} consultas futuras foram canceladas`}.` : ""}`);
+    } catch (falha) {
+      setErro(mensagemDe(falha));
+    } finally {
+      setExcluindo(false);
+    }
   }
 
-  return {
-    busca,
-    setBusca,
-    tutores,
-    carregado: !!lista.dados,
-    erroDaLista: lista.erro,
-    tutor,
-    selecionado,
-    modo,
-    form,
-    erro,
-    msg,
-    confirmando,
-    salvando,
-    animalAberto,
-    formAnimal,
-    erroAnimal,
-    setForm,
-    setFormAnimal,
-    selecionar(id: number | null) {
-      limpar();
-      setModo("ver");
-      setSelecionado(id);
-    },
-    novo() {
-      limpar();
-      setForm(TUTOR_VAZIO);
-      setModo("novo");
-    },
-    editar(t: Tutor) {
-      limpar();
-      setSelecionado(t.id);
-      setForm({ nome: t.nome, cpf: t.cpf, telefone: t.telefone, email: t.email, endereco: t.endereco, canalWhatsapp: t.canalWhatsapp, canalEmail: t.canalEmail });
-      setModo("editar");
-    },
-    cancelar() {
-      setErro("");
-      setModo("ver");
-    },
-    async salvar(): Promise<boolean> {
-      const cpf = form.cpf.replace(/\D/g, "");
-      if (!form.nome.trim() || !form.telefone.trim() || (modo === "novo" && cpf.length !== 11)) {
-        setErro("Preencha nome, CPF e telefone. O CPF precisa ter 11 dígitos.");
-        return false;
-      }
-      setSalvando(true);
-      setErro("");
-      try {
-        const criando = modo === "novo";
-        const { tutor: salvo } = await api<{ tutor: Tutor }>(criando ? "/api/tutores" : `/api/tutores/${selecionado}`, {
-          metodo: criando ? "POST" : "PUT",
-          corpo: form,
-        });
+  const formTutor = rota.modo !== "ver" && (rota.modo === "novo" || t) && (
+    <FormTutor
+      key={caminho}
+      tutor={rota.modo === "novo" ? null : t}
+      celular={celular}
+      aoCancelar={() => ir(rota.modo === "novo" ? "/tutores" : `/tutores/${t!.id}`)}
+      aoSalvar={async (salvo, criado) => {
         setBusca("");
-        setTermo("");
-        await lista.recarregar();
-        setSelecionado(salvo.id);
-        setModo("ver");
-        setMsg(criando ? "Tutor cadastrado. Agora cadastre os animais dele abaixo." : "Dados do tutor atualizados.");
-        if (criando) {
-          setFormAnimal(ANIMAL_VAZIO);
-          setAnimalAberto("novo");
-        }
-        return true;
-      } catch (e) {
-        setErro(mensagemDe(e));
-        return false;
-      } finally {
-        setSalvando(false);
-      }
-    },
-    pedirExclusao() {
-      setMsg("");
-      setConfirmando(true);
-    },
-    manter: () => setConfirmando(false),
-    async excluir(t: Tutor): Promise<boolean> {
-      setSalvando(true);
-      try {
-        const { consultasCanceladas: n } = await api<{ consultasCanceladas: number }>(`/api/tutores/${t.id}`, { metodo: "DELETE" });
-        setConfirmando(false);
-        setSelecionado(null);
-        await lista.recarregar();
-        setMsg(`O cadastro de ${t.nome} foi excluído.${n ? ` ${n === 1 ? "1 consulta futura foi cancelada" : `${n} consultas futuras foram canceladas`}.` : ""}`);
-        return true;
-      } catch (e) {
-        setMsg("");
-        setErro(mensagemDe(e));
-        return false;
-      } finally {
-        setSalvando(false);
-      }
-    },
-    abrirAnimal(a: Animal | "novo" | null) {
-      setErroAnimal(null);
-      setMsg("");
-      if (a === null) return setAnimalAberto(null);
-      if (a === "novo") {
-        setFormAnimal(ANIMAL_VAZIO);
-        return setAnimalAberto("novo");
-      }
-      setFormAnimal({ nome: a.nome, especie: a.especie, raca: a.raca, sexo: a.sexo, nascimento: a.nascimento });
-      setAnimalAberto(a.id);
-    },
-    async salvarAnimal(tutorId: number) {
-      if (!formAnimal.nome.trim()) return setErroAnimal({ campo: "nome", texto: "Informe o nome do animal." });
-      if (!formAnimal.nascimento) return setErroAnimal({ campo: "nascimento", texto: "Informe a data de nascimento." });
-      if (formAnimal.nascimento > hojeLocal()) return setErroAnimal({ campo: "nascimento", texto: "A data não pode estar no futuro." });
-      setSalvando(true);
-      setErroAnimal(null);
-      try {
-        const criando = animalAberto === "novo";
-        await api(criando ? `/api/tutores/${tutorId}/animais` : `/api/animais/${animalAberto}`, { metodo: criando ? "POST" : "PUT", corpo: formAnimal });
-        await lista.recarregar();
-        setAnimalAberto(null);
-        setMsg(criando ? `${formAnimal.nome.trim()} foi cadastrado e vinculado ao tutor.` : "Dados do animal atualizados.");
-      } catch (e) {
-        setErroAnimal({ campo: e instanceof ErroApi ? e.campo : undefined, texto: mensagemDe(e) });
-      } finally {
-        setSalvando(false);
-      }
-    },
-    async excluirAnimal(a: Animal) {
-      setSalvando(true);
-      try {
-        await api(`/api/animais/${a.id}`, { metodo: "DELETE" });
-        await lista.recarregar();
-        setAnimalAberto(null);
-        setMsg(`O cadastro de ${a.nome} foi excluído.`);
-      } catch (e) {
-        setErroAnimal({ texto: mensagemDe(e) });
-      } finally {
-        setSalvando(false);
-      }
-    },
-  };
-}
-
-type Estado = ReturnType<typeof useTutores>;
-
-function CamposDoTutor({ s }: { s: Estado }) {
-  const campo = (chave: "nome" | "cpf" | "telefone" | "email" | "endereco", valor: string) => s.setForm({ ...s.form, [chave]: valor });
-  return (
-    <>
-      <div className="field">
-        <label className="lbl" htmlFor="tn">
-          Nome completo
-        </label>
-        <input className="inp" id="tn" autoComplete="off" placeholder="Ex.: Mariana Teixeira" value={s.form.nome} onChange={(e) => campo("nome", e.target.value)} />
-      </div>
-      <div className="field">
-        <label className="lbl" htmlFor="tc">
-          CPF
-        </label>
-        {s.modo === "novo" ? (
-          <input className="inp" id="tc" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={s.form.cpf} onChange={(e) => campo("cpf", mascaraCpf(e.target.value))} />
-        ) : (
-          <input className="inp" id="tc" value={s.form.cpf} disabled title="O CPF não pode ser alterado depois do cadastro" />
-        )}
-      </div>
-      <div className="field">
-        <label className="lbl" htmlFor="tt">
-          Telefone / WhatsApp
-        </label>
-        <input className="inp" id="tt" type="tel" inputMode="tel" autoComplete="off" placeholder="(71) 90000-0000" value={s.form.telefone} onChange={(e) => campo("telefone", mascaraTelefone(e.target.value))} />
-      </div>
-      <div className="field">
-        <label className="lbl" htmlFor="te">
-          E-mail
-        </label>
-        <input className="inp" id="te" type="email" inputMode="email" autoComplete="off" placeholder="nome@email.com" value={s.form.email} onChange={(e) => campo("email", e.target.value)} />
-      </div>
-    </>
+        await atualizar();
+        // Tutor novo: a ficha já abre com o formulário de animal.
+        if (criado) ir(`/tutores/${salvo.id}/animais/novo`, "Tutor cadastrado. Agora cadastre os animais dele abaixo.");
+        else ir(`/tutores/${salvo.id}`, "Dados do tutor atualizados.");
+      }}
+    />
   );
-}
 
-function Endereco({ s }: { s: Estado }) {
-  return (
-    <div className="field">
-      <label className="lbl" htmlFor="ta">
-        Endereço
-      </label>
-      <input className="inp" id="ta" autoComplete="off" placeholder="Rua, número · bairro, cidade" value={s.form.endereco} onChange={(e) => s.setForm({ ...s.form, endereco: e.target.value })} />
-    </div>
+  const animalEmEdicao = typeof rota.animal === "number" ? (t?.animais.find((a) => a.id === rota.animal) ?? null) : null;
+  const formAnimal = t && rota.animal !== null && (rota.animal === "novo" || animalEmEdicao) && (
+    <FormAnimal
+      key={caminho}
+      tutorId={t.id}
+      animal={animalEmEdicao}
+      celular={celular}
+      aoSalvar={async (texto) => {
+        await atualizar();
+        ir(`/tutores/${t.id}`, texto);
+      }}
+      aoExcluir={async (texto) => {
+        await atualizar();
+        ir(`/tutores/${t.id}`, texto);
+      }}
+    />
   );
-}
+  const alternarNovoAnimal = () => t && ir(rota.animal === "novo" ? `/tutores/${t.id}` : `/tutores/${t.id}/animais/novo`);
 
-function Canais({ s, legenda, estilo }: { s: Estado; legenda: string; estilo?: React.CSSProperties }) {
-  return (
-    <fieldset style={{ border: 0, margin: 0, padding: 0 }}>
-      <legend className="lbl" style={{ marginBottom: 8, padding: 0 }}>
-        {legenda}
-      </legend>
-      <div style={estilo}>
-        <label className="check">
-          <input type="checkbox" checked={s.form.canalWhatsapp} onChange={(e) => s.setForm({ ...s.form, canalWhatsapp: e.target.checked })} />
-          WhatsApp
-        </label>
-        <label className="check">
-          <input type="checkbox" checked={s.form.canalEmail} onChange={(e) => s.setForm({ ...s.form, canalEmail: e.target.checked })} />
-          E-mail
-        </label>
-      </div>
-    </fieldset>
-  );
-}
-
-function CamposDoAnimal({ s }: { s: Estado }) {
-  const f = s.formAnimal;
-  const erroEm = (campo: string) => s.erroAnimal?.campo === campo;
-  const campo = (chave: keyof typeof f, valor: string) => s.setFormAnimal({ ...f, [chave]: valor });
-  return {
-    nome: (
-      <div className="field">
-        <label className="lbl" htmlFor="an">
-          Nome do animal
-        </label>
-        <input className="inp" id="an" autoComplete="off" value={f.nome} aria-invalid={erroEm("nome") || undefined} onChange={(e) => campo("nome", e.target.value)} />
-        {erroEm("nome") && <span className="alert s">{s.erroAnimal!.texto}</span>}
-      </div>
-    ),
-    especie: (
-      <div className="field">
-        <label className="lbl" htmlFor="ae">
-          Espécie
-        </label>
-        <select className="inp" id="ae" value={f.especie} onChange={(e) => campo("especie", e.target.value)}>
-          <option>Canina</option>
-          <option>Felina</option>
-          <option>Outra</option>
-        </select>
-      </div>
-    ),
-    raca: (
-      <div className="field">
-        <label className="lbl" htmlFor="ar">
-          Raça
-        </label>
-        <input className="inp" id="ar" autoComplete="off" placeholder="Ex.: Poodle, SRD" value={f.raca} onChange={(e) => campo("raca", e.target.value)} />
-      </div>
-    ),
-    sexo: (
-      <div className="field">
-        <label className="lbl" htmlFor="as">
-          Sexo
-        </label>
-        <select className="inp" id="as" value={f.sexo} onChange={(e) => campo("sexo", e.target.value)}>
-          <option>Fêmea</option>
-          <option>Macho</option>
-        </select>
-      </div>
-    ),
-    nascimento: (
-      <div className="field">
-        <label className="lbl" htmlFor="ad">
-          Data de nascimento
-        </label>
-        <input className="inp" id="ad" type="date" max={hojeLocal()} value={f.nascimento} aria-invalid={erroEm("nascimento") || undefined} aria-describedby="ad-err" onChange={(e) => campo("nascimento", e.target.value)} />
-        {erroEm("nascimento") && (
-          <span id="ad-err" className="alert s">
-            {s.erroAnimal!.texto}
-          </span>
-        )}
-      </div>
-    ),
-  };
-}
-
-function ExcluirAnimal({ s, animal, classe }: { s: Estado; animal: Animal; classe: string }) {
-  const [pedindo, setPedindo] = useState(false);
-  if (!pedindo) {
-    return (
-      <button type="button" className={classe} onClick={() => setPedindo(true)}>
-        Excluir animal
-      </button>
-    );
-  }
-  return (
-    <div className="danger" style={{ gridColumn: "1 / -1" }}>
-      <b>Excluir {animal.nome}?</b>
-      <span className="small">As consultas futuras deste animal serão canceladas. O histórico fica guardado.</span>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button type="button" className={classe.replace(/btnd/, "btn2")} style={{ flex: 1 }} onClick={() => setPedindo(false)}>
-          Manter
+  const confirmacao = t && confirmando && (
+    <div className="danger">
+      <strong>
+        Excluir {t.nome} e {textoDosVinculados(t.animais.length)}?
+      </strong>
+      <span className={celular ? "small" : undefined}>As consultas futuras serão canceladas. O histórico já registrado fica guardado no banco de dados da clínica.</span>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button type="button" className={celular ? "btn2" : "d-btn2 s14"} style={{ flex: "1 1 140px" }} onClick={() => setConfirmando(false)}>
+          {celular ? "Manter" : "Manter cadastro"}
         </button>
-        <button type="button" className={classe.replace(/btnd/, "btnD")} style={{ flex: 1 }} disabled={s.salvando} onClick={() => s.excluirAnimal(animal)}>
-          Excluir
+        <button type="button" className={celular ? "btnD" : "d-btnD s14"} style={{ flex: "1 1 140px" }} disabled={excluindo} onClick={() => excluirTutor(t)}>
+          Excluir tutor
         </button>
       </div>
     </div>
   );
-}
-
-const descricaoDosPets = (t: Tutor) => (t.animais.length ? t.animais.map((a) => a.nome).join(", ") : "Sem animais cadastrados");
-
-function textoDosVinculados(n: number): string {
-  return n === 0 ? "seu cadastro" : n === 1 ? "o animal vinculado" : `os ${n} animais vinculados`;
-}
-
-export function Tutores() {
-  const { celular, permissoes } = useCasca();
-  const q = useSearchParams();
-  const s = useTutores(q);
-  const podeEditar = permissoes.editarCadastros;
-  const [tela, setTela] = useState<"lista" | "ficha">(() => (q.get("tutor") ? "ficha" : "lista"));
-  const enviar = (acao: () => unknown) => (e: FormEvent) => {
-    e.preventDefault();
-    void acao();
-  };
 
   // ---------- Celular ----------
   if (celular) {
-    const t = s.tutor;
-    const campos = CamposDoAnimal({ s });
-    const editando = typeof s.animalAberto === "number" ? t?.animais.find((a) => a.id === s.animalAberto) : undefined;
+    if (formTutor) return formTutor;
 
-    if (s.modo !== "ver") {
-      const titulo = s.modo === "novo" ? "Novo tutor" : "Editar tutor";
-      return (
-        <>
-          <TopoCelular
-            titulo={titulo}
-            esquerda={
-              <button type="button" className="iconbtn" aria-label="Cancelar" onClick={s.cancelar}>
-                <Traco d={CAMINHOS.fechar} size={22} largura={2.2} />
-              </button>
-            }
-          />
-          <main className="page withcta">
-            <div className="eyebrow">REQ 04 · {titulo}</div>
-            <form id="form-tutor" className="stack" aria-label={titulo} noValidate onSubmit={enviar(async () => (await s.salvar()) && setTela("ficha"))}>
-              <CamposDoTutor s={s} />
-              <Endereco s={s} />
-              <Canais s={s} legenda="Receber lembretes por" />
-              {s.erro && (
-                <span role="alert" className="alert">
-                  {s.erro}
-                </span>
-              )}
-              {s.modo === "novo" && <span className="small muted">Depois de salvar, cadastre os animais na ficha do tutor.</span>}
-            </form>
-          </main>
-          <div className="ctabar">
-            <button type="submit" form="form-tutor" className="btn" disabled={s.salvando}>
-              {s.salvando ? "Salvando…" : s.modo === "novo" ? "Cadastrar tutor" : "Salvar alterações"}
-            </button>
-          </div>
-        </>
-      );
-    }
-
-    if (tela === "ficha" && t) {
+    if (rota.id) {
       return (
         <>
           <TopoCelular
             titulo="Ficha do tutor"
             esquerda={
-              <button
-                type="button"
-                className="iconbtn"
-                aria-label="Voltar para a lista"
-                onClick={() => {
-                  s.selecionar(null);
-                  setTela("lista");
-                }}
-              >
+              <Link className="iconbtn" href="/tutores" aria-label="Voltar para a lista">
                 <Traco d={CAMINHOS.voltar} size={24} largura={2.2} />
-              </button>
+              </Link>
             }
           />
           <main className="page">
-            {s.msg && (
+            {msg && (
               <div role="status" className="msg">
-                {s.msg}
+                {msg}
               </div>
             )}
-            {s.erro && (
+            {erro && (
               <div role="alert" className="erro">
-                {s.erro}
+                {erro}
               </div>
             )}
-            <div>
-              <h2 className="h1">{t.nome}</h2>
-              <span className="small muted">Cliente desde {mesAno(t.criadoEm)}</span>
-            </div>
-            {podeEditar && (
-              <div className="row" style={{ gap: 8 }}>
-                <button type="button" className="btn2" onClick={() => s.editar(t)}>
-                  Editar dados
-                </button>
-                <button type="button" className="btnd" onClick={s.pedirExclusao}>
-                  Excluir
-                </button>
-              </div>
-            )}
-            {s.confirmando && (
-              <div className="danger">
-                <b>
-                  Excluir {t.nome} e {textoDosVinculados(t.animais.length)}?
-                </b>
-                <span className="small">As consultas futuras serão canceladas. O histórico já registrado fica guardado.</span>
-                <div className="row" style={{ gap: 8 }}>
-                  <button type="button" className="btn2" onClick={s.manter}>
-                    Manter
-                  </button>
-                  <button type="button" className="btnD" disabled={s.salvando} onClick={async () => (await s.excluir(t)) && setTela("lista")}>
-                    Excluir tutor
-                  </button>
+            {naoEncontrado && <p className="vazio">Tutor não encontrado. Ele pode ter sido excluído.</p>}
+            {t && (
+              <>
+                <div>
+                  <h2 className="h1">{t.nome}</h2>
+                  <span className="small muted">Cliente desde {mesAno(t.criadoEm)}</span>
                 </div>
-              </div>
-            )}
-            <section className="card">
-              <dl className="dl col">
-                <dt>CPF</dt>
-                <dd>{t.cpf}</dd>
-                <dt>Telefone / WhatsApp</dt>
-                <dd>
-                  <a href={`tel:${t.telefone.replace(/\D/g, "")}`}>{t.telefone}</a>
-                </dd>
-                <dt>E-mail</dt>
-                <dd>{t.email || "—"}</dd>
-                <dt>Endereço</dt>
-                <dd>{t.endereco || "—"}</dd>
-                <dt>Notificações</dt>
-                <dd style={{ marginBottom: 0 }}>{canais(t)}</dd>
-              </dl>
-            </section>
-            <div className="row" style={{ justifyContent: "space-between" }}>
-              <h2 className="h2">Animais</h2>
-              {podeEditar && (
-                <button type="button" className="link" onClick={() => s.abrirAnimal(s.animalAberto === "novo" ? null : "novo")}>
-                  {s.animalAberto === "novo" ? "Fechar formulário" : "+ Adicionar animal"}
-                </button>
-              )}
-            </div>
-            {t.animais.length === 0 && s.animalAberto !== "novo" && <p className="vazio">Nenhum animal cadastrado para este tutor.</p>}
-            {t.animais.map((a) => (
-              <article key={a.id} className="card stack" style={{ gap: 10 }}>
-                <div className="row">
-                  <span className="pawbox">
-                    <Pata size={24} />
-                  </span>
-                  <div style={{ flex: 1 }}>
-                    <b style={{ fontSize: 17 }}>{a.nome}</b>
-                    <div className="small muted">
-                      {[a.especie, a.raca, a.sexo].filter(Boolean).join(" · ")} · nasc. {dataBR(a.nascimento)}
-                    </div>
-                  </div>
-                </div>
-                {(podeEditar || permissoes.agendar) && (
+                {podeEditar && (
                   <div className="row" style={{ gap: 8 }}>
-                    {podeEditar && (
-                      <button type="button" className="btn2 sm" onClick={() => s.abrirAnimal(a)}>
-                        Editar
-                      </button>
-                    )}
-                    {permissoes.agendar && (
-                      <Link className="btn sm" href={`/agenda/novo?tutor=${t.id}&animal=${a.id}`}>
-                        Agendar
-                      </Link>
-                    )}
+                    <Link className="btn2" href={`/tutores/${t.id}/editar`}>
+                      Editar dados
+                    </Link>
+                    <button type="button" className="btnd" onClick={() => setConfirmando(true)}>
+                      Excluir
+                    </button>
                   </div>
                 )}
-              </article>
-            ))}
-            {s.animalAberto !== null && (
-              <form className="card stack" aria-label={editando ? "Editar animal" : "Cadastrar animal"} style={{ border: "2px solid #3651D9" }} noValidate onSubmit={enviar(() => s.salvarAnimal(t.id))}>
-                <h2 className="h2">{editando ? `Editar ${editando.nome}` : "Novo animal"}</h2>
-                {campos.nome}
-                <div className="grid2">
-                  {campos.especie}
-                  {campos.sexo}
+                {confirmacao}
+                <section className="card">
+                  <dl className="dl col">
+                    <dt>CPF</dt>
+                    <dd>{t.cpf}</dd>
+                    <dt>Telefone / WhatsApp</dt>
+                    <dd>
+                      <a href={`tel:${t.telefone.replace(/\D/g, "")}`}>{t.telefone}</a>
+                    </dd>
+                    <dt>E-mail</dt>
+                    <dd>{t.email || "—"}</dd>
+                    <dt>Endereço</dt>
+                    <dd>{t.endereco || "—"}</dd>
+                    <dt>Notificações</dt>
+                    <dd style={{ marginBottom: 0 }}>{canais(t)}</dd>
+                  </dl>
+                </section>
+                <div className="row" style={{ justifyContent: "space-between" }}>
+                  <h2 className="h2">Animais</h2>
+                  {podeEditar && (
+                    <button type="button" className="link" onClick={alternarNovoAnimal}>
+                      {rota.animal === "novo" ? "Fechar formulário" : "+ Adicionar animal"}
+                    </button>
+                  )}
                 </div>
-                {campos.raca}
-                {campos.nascimento}
-                {s.erroAnimal && !["nome", "nascimento"].includes(s.erroAnimal.campo ?? "") && (
-                  <span role="alert" className="alert">
-                    {s.erroAnimal.texto}
-                  </span>
-                )}
-                <button type="submit" className="btn" disabled={s.salvando}>
-                  {s.salvando ? "Salvando…" : "Salvar animal"}
-                </button>
-                {editando && <ExcluirAnimal s={s} animal={editando} classe="btnd" />}
-              </form>
+                {t.animais.length === 0 && rota.animal !== "novo" && <p className="vazio">Nenhum animal cadastrado para este tutor.</p>}
+                {t.animais.map((a) => (
+                  <article key={a.id} className="card stack" style={{ gap: 10 }}>
+                    <div className="row">
+                      <span className="pawbox">
+                        <Pata size={24} />
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <b style={{ fontSize: 17 }}>{a.nome}</b>
+                        <div className="small muted">
+                          {[a.especie, a.raca, a.sexo].filter(Boolean).join(" · ")} · nasc. {dataBR(a.nascimento)}
+                        </div>
+                      </div>
+                    </div>
+                    {(podeEditar || permissoes.agendar) && (
+                      <div className="row" style={{ gap: 8 }}>
+                        {podeEditar && (
+                          <Link className="btn2 sm" href={`/tutores/${t.id}/animais/${a.id}`}>
+                            Editar
+                          </Link>
+                        )}
+                        {permissoes.agendar && (
+                          <Link className="btn sm" href={`/agenda/novo?tutor=${t.id}&animal=${a.id}`}>
+                            Agendar
+                          </Link>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                ))}
+                {formAnimal}
+              </>
             )}
           </main>
         </>
@@ -566,33 +599,25 @@ export function Tutores() {
           <div className="eyebrow">REQ 04 · REQ 05</div>
           <label className="search">
             <Lupa size={20} />
-            <input type="search" aria-label="Buscar tutor ou animal" placeholder="Nome, CPF, telefone ou animal" value={s.busca} onChange={(e) => s.setBusca(e.target.value)} />
+            <input type="search" aria-label="Buscar tutor ou animal" placeholder="Nome, CPF, telefone ou animal" value={busca} onChange={(e) => setBusca(e.target.value)} />
           </label>
-          {s.msg && (
+          {msg && (
             <div role="status" className="msg">
-              {s.msg}
+              {msg}
             </div>
           )}
-          {s.erroDaLista && (
+          {lista.erro && (
             <div role="alert" className="erro">
-              {s.erroDaLista}
+              {lista.erro}
             </div>
           )}
-          {s.carregado && s.tutores.length === 0 ? (
-            <p className="vazio">{s.busca ? "Nenhum tutor encontrado para esta busca." : "Nenhum tutor cadastrado ainda."}</p>
+          {lista.dados && tutores.length === 0 ? (
+            <p className="vazio">{busca ? "Nenhum tutor encontrado para esta busca." : "Nenhum tutor cadastrado ainda."}</p>
           ) : (
             <ul className="list card" style={{ padding: "4px 16px" }}>
-              {s.tutores.map((x) => (
+              {tutores.map((x) => (
                 <li key={x.id}>
-                  <button
-                    type="button"
-                    className="lrow"
-                    onClick={() => {
-                      s.selecionar(x.id);
-                      setTela("ficha");
-                      window.scrollTo(0, 0);
-                    }}
-                  >
+                  <Link className="lrow" href={`/tutores/${x.id}`} style={{ textDecoration: "none" }}>
                     <span className="av" style={{ background: "#E4F1DC", color: "#2F5D1E" }}>
                       {iniciais(x.nome)}
                     </span>
@@ -601,82 +626,49 @@ export function Tutores() {
                       <span className="small muted">{descricaoDosPets(x)}</span>
                     </span>
                     <Traco d={CAMINHOS.seta} size={20} largura={2} color="#5B6782" />
-                  </button>
+                  </Link>
                 </li>
               ))}
             </ul>
           )}
         </main>
         {podeEditar && (
-          <button type="button" className="fab" onClick={s.novo}>
+          <Link className="fab" href="/tutores/novo" style={{ textDecoration: "none", color: "#fff" }}>
             <Traco d={CAMINHOS.mais} size={22} largura={2.4} />
             Novo tutor
-          </button>
+          </Link>
         )}
       </>
     );
   }
 
   // ---------- Desktop ----------
-  const t = s.tutor ?? s.tutores[0] ?? null;
-  const campos = CamposDoAnimal({ s });
-  const editando = typeof s.animalAberto === "number" ? t?.animais.find((a) => a.id === s.animalAberto) : undefined;
-  const titulo = s.modo === "novo" ? "Novo tutor" : "Editar tutor";
   let painel: ReactNode;
-
-  if (s.modo !== "ver") {
-    painel = (
-      <form aria-label={titulo} className="d-card" style={{ border: "2px solid #3651D9", display: "flex", flexDirection: "column", gap: 16 }} noValidate onSubmit={enviar(s.salvar)}>
-        <div>
-          <div className="eyebrow t">REQ 04 · {titulo}</div>
-          <h2 className="h2" style={{ margin: "4px 0 0", fontSize: 28 }}>
-            {titulo}
-          </h2>
-        </div>
-        <div className="d-form2">
-          <CamposDoTutor s={s} />
-        </div>
-        <Endereco s={s} />
-        <Canais s={s} legenda="Receber lembretes de consultas e vacinas por" estilo={{ display: "flex", gap: 20, flexWrap: "wrap" }} />
-        {s.erro && (
-          <span role="alert" className="alert">
-            {s.erro}
-          </span>
-        )}
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button type="submit" className="d-btn" style={{ flex: "0 1 220px", height: 48 }} disabled={s.salvando}>
-            {s.salvando ? "Salvando…" : s.modo === "novo" ? "Cadastrar tutor" : "Salvar alterações"}
-          </button>
-          <button type="button" className="d-btn2" style={{ flex: "0 1 160px", height: 48 }} onClick={s.cancelar}>
-            Cancelar
-          </button>
-        </div>
-        {s.modo === "novo" && <span style={{ fontSize: 14, color: "#5B6782" }}>Depois de salvar, cadastre os animais deste tutor na própria ficha.</span>}
-      </form>
-    );
+  if (formTutor) {
+    painel = formTutor;
   } else if (!t) {
     painel = (
       <section className="d-card">
-        {s.msg && (
+        {msg && (
           <div role="status" className="msg" style={{ marginBottom: 12 }}>
-            {s.msg}
+            {msg}
           </div>
         )}
-        <p className="d-vazio">{s.carregado ? "Selecione um tutor na lista ou cadastre um novo." : "Carregando…"}</p>
+        <p className="d-vazio">{naoEncontrado ? "Tutor não encontrado. Ele pode ter sido excluído." : lista.dados && !idDaFicha ? "Nenhum tutor para exibir. Cadastre um novo tutor." : "Carregando…"}</p>
       </section>
     );
   } else {
     painel = (
       <>
         <section aria-label="Ficha do tutor" className="d-card" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          {s.msg && (
+          {msg && (
             <div role="status" className="msg">
-              {s.msg}
+              {msg}
             </div>
           )}
-          {s.erro && (
+          {erro && (
             <div role="alert" className="danger">
-              {s.erro}
+              {erro}
             </div>
           )}
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -689,31 +681,16 @@ export function Tutores() {
             </div>
             {podeEditar && (
               <div style={{ display: "flex", gap: 8 }}>
-                <button type="button" className="d-btn2 s14" onClick={() => s.editar(t)}>
+                <Link className="d-btn2 s14" href={`/tutores/${t.id}/editar`}>
                   Editar dados
-                </button>
-                <button type="button" className="d-btnd s14" onClick={s.pedirExclusao}>
+                </Link>
+                <button type="button" className="d-btnd s14" onClick={() => setConfirmando(true)}>
                   Excluir
                 </button>
               </div>
             )}
           </div>
-          {s.confirmando && (
-            <div className="danger">
-              <strong>
-                Excluir {t.nome} e {textoDosVinculados(t.animais.length)}?
-              </strong>
-              <span>As consultas futuras serão canceladas. O histórico já registrado fica guardado no banco de dados da clínica.</span>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button type="button" className="d-btn2 s14" style={{ flex: "1 1 140px" }} onClick={s.manter}>
-                  Manter cadastro
-                </button>
-                <button type="button" className="d-btnD s14" style={{ flex: "1 1 140px" }} disabled={s.salvando} onClick={() => s.excluir(t)}>
-                  Excluir tutor
-                </button>
-              </div>
-            </div>
-          )}
+          {confirmacao}
           <dl className="d-dados">
             <div>
               <dt>CPF</dt>
@@ -742,8 +719,8 @@ export function Tutores() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <h2 className="h2">Animais vinculados</h2>
             {podeEditar && (
-              <button type="button" className="d-btn2 s14" onClick={() => s.abrirAnimal(s.animalAberto === "novo" ? null : "novo")}>
-                {s.animalAberto === "novo" ? "Fechar formulário" : "+ Adicionar animal"}
+              <button type="button" className="d-btn2 s14" onClick={alternarNovoAnimal}>
+                {rota.animal === "novo" ? "Fechar formulário" : "+ Adicionar animal"}
               </button>
             )}
           </div>
@@ -771,9 +748,9 @@ export function Tutores() {
                   {(podeEditar || permissoes.agendar) && (
                     <div className="btns">
                       {podeEditar && (
-                        <button type="button" className="o" onClick={() => s.abrirAnimal(a)}>
+                        <Link className="o" href={`/tutores/${t.id}/animais/${a.id}`}>
                           Editar
-                        </button>
+                        </Link>
                       )}
                       {permissoes.agendar && (
                         <Link href={`/agenda/novo?tutor=${t.id}&animal=${a.id}`} className="p">
@@ -786,30 +763,7 @@ export function Tutores() {
               ))}
             </div>
           )}
-
-          {s.animalAberto !== null && (
-            <form aria-label={editando ? "Editar animal" : "Cadastrar animal"} className="d-form3" style={{ borderTop: "1px solid #DCE3EF", paddingTop: 18 }} noValidate onSubmit={enviar(() => s.salvarAnimal(t.id))}>
-              <div className="eyebrow t" style={{ gridColumn: "1 / -1" }}>
-                REQ 05 · {editando ? `Editar ${editando.nome}` : "Novo animal"}
-              </div>
-              {campos.nome}
-              {campos.especie}
-              {campos.raca}
-              {campos.sexo}
-              {campos.nascimento}
-              <div style={{ display: "flex", alignItems: "flex-start", paddingTop: 23 }}>
-                <button type="submit" className="d-btn" style={{ width: "100%" }} disabled={s.salvando}>
-                  {s.salvando ? "Salvando…" : "Salvar animal"}
-                </button>
-              </div>
-              {s.erroAnimal && !["nome", "nascimento"].includes(s.erroAnimal.campo ?? "") && (
-                <span role="alert" className="alert" style={{ gridColumn: "1 / -1" }}>
-                  {s.erroAnimal.texto}
-                </span>
-              )}
-              {editando && <ExcluirAnimal s={s} animal={editando} classe="d-btnd s14" />}
-            </form>
-          )}
+          {formAnimal}
         </section>
       </>
     );
@@ -823,9 +777,9 @@ export function Tutores() {
           <h1>Tutores e animais</h1>
         </div>
         {podeEditar && (
-          <button type="button" className="d-btn" onClick={s.novo}>
+          <Link className="d-btn" href="/tutores/novo">
             + Novo tutor
-          </button>
+          </Link>
         )}
       </header>
 
@@ -833,24 +787,24 @@ export function Tutores() {
         <section aria-label="Lista de tutores" className="d-card d-narrow" style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
           <label className="d-search">
             <Lupa />
-            <input aria-label="Buscar tutor ou animal" placeholder="Nome, CPF, telefone ou animal" value={s.busca} onChange={(e) => s.setBusca(e.target.value)} />
+            <input aria-label="Buscar tutor ou animal" placeholder="Nome, CPF, telefone ou animal" value={busca} onChange={(e) => setBusca(e.target.value)} />
           </label>
-          {s.erroDaLista && (
+          {lista.erro && (
             <div role="alert" className="danger">
-              {s.erroDaLista}
+              {lista.erro}
             </div>
           )}
-          {s.carregado && s.tutores.length === 0 && <p className="d-vazio">{s.busca ? "Nenhum tutor encontrado para esta busca." : "Nenhum tutor cadastrado ainda."}</p>}
+          {lista.dados && tutores.length === 0 && <p className="d-vazio">{busca ? "Nenhum tutor encontrado para esta busca." : "Nenhum tutor cadastrado ainda."}</p>}
           <ul className="d-tlist">
-            {s.tutores.map((x) => (
+            {tutores.map((x) => (
               <li key={x.id}>
-                <button type="button" className="d-trow" aria-pressed={s.modo !== "novo" && x.id === t?.id} onClick={() => s.selecionar(x.id)}>
+                <Link className="d-trow" href={`/tutores/${x.id}`} aria-current={rota.modo !== "novo" && x.id === idDaFicha ? "page" : undefined}>
                   <span className="av">{iniciais(x.nome)}</span>
                   <span style={{ flex: "1 1 auto", minWidth: 0 }}>
                     <b>{x.nome}</b>
                     <small>{descricaoDosPets(x)}</small>
                   </span>
-                </button>
+                </Link>
               </li>
             ))}
           </ul>

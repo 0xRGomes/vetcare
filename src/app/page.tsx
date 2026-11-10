@@ -5,5 +5,6 @@ import { sessaoAtual } from "@/server/http/sessao";
 export default async function Raiz() {
   const sessao = await sessaoAtual();
   if (!sessao) redirect("/login");
+  if (sessao.trocarSenha) redirect("/senha");
   redirect(servicos().rbac.permissoes(sessao).inicio ? "/inicio" : "/agenda");
 }

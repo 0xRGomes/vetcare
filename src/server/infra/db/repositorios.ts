@@ -17,7 +17,9 @@ import type {
 } from "@/server/domain/modelos";
 import type {
   AnimalRepository,
+  AuditoriaRepository,
   ConsultaRepository,
+  DadosUsuario,
   ProfissionalRepository,
   TutorRepository,
   UsuarioRepository,
@@ -36,6 +38,8 @@ const paraUsuario = (l: Linha): Usuario => ({
   tentativasFalhas: l.tentativas_falhas as number,
   bloqueadoAte: (l.bloqueado_ate as string | null) ?? null,
   profissionalId: (l.profissional_id as number | null) ?? null,
+  senhaProvisoria: l.senha_provisoria === 1,
+  ultimoAcesso: (l.ultimo_acesso as string | null) ?? null,
 });
 
 const paraProfissional = (l: Linha): Profissional => ({
@@ -102,6 +106,63 @@ export class SqliteUsuarioRepository implements UsuarioRepository {
 
   limparFalhasDeLogin(id: number) {
     this.db.prepare("UPDATE usuarios SET tentativas_falhas = 0, bloqueado_ate = NULL WHERE id = ?").run(id);
+  }
+
+  registrarAcesso(id: number, instante: string) {
+    this.db.prepare("UPDATE usuarios SET ultimo_acesso = ? WHERE id = ?").run(instante, id);
+  }
+
+  listar(busca?: string) {
+    const termo = `%${(busca ?? "").trim().replace(/[%_]/g, "")}%`;
+    return this.db
+      .prepare("SELECT * FROM usuarios WHERE nome LIKE ? OR email LIKE ? ORDER BY ativo DESC, nome COLLATE NOCASE")
+      .all(termo, termo)
+      .map(paraUsuario);
+  }
+
+  buscarPorProfissional(profissionalId: number) {
+    const l = this.db.prepare("SELECT * FROM usuarios WHERE profissional_id = ?").get(profissionalId);
+    return l ? paraUsuario(l) : null;
+  }
+
+  criar(d: DadosUsuario, senhaHash: string) {
+    const r = this.db
+      .prepare("INSERT INTO usuarios (nome, email, senha_hash, perfil, profissional_id, senha_provisoria) VALUES (?, ?, ?, ?, ?, 1)")
+      .run(d.nome, d.email, senhaHash, d.perfil, d.profissionalId);
+    return Number(r.lastInsertRowid);
+  }
+
+  atualizar(id: number, d: DadosUsuario) {
+    this.db.prepare("UPDATE usuarios SET nome = ?, email = ?, perfil = ?, profissional_id = ? WHERE id = ?").run(d.nome, d.email, d.perfil, d.profissionalId, id);
+  }
+
+  definirAtivo(id: number, ativo: boolean) {
+    this.db.prepare("UPDATE usuarios SET ativo = ?, tentativas_falhas = 0, bloqueado_ate = NULL WHERE id = ?").run(ativo ? 1 : 0, id);
+  }
+
+  definirSenha(id: number, senhaHash: string, provisoria: boolean) {
+    this.db
+      .prepare("UPDATE usuarios SET senha_hash = ?, senha_provisoria = ?, tentativas_falhas = 0, bloqueado_ate = NULL WHERE id = ?")
+      .run(senhaHash, provisoria ? 1 : 0, id);
+  }
+
+  administradoresAtivos() {
+    return (this.db.prepare("SELECT count(*) AS n FROM usuarios WHERE perfil = 'ADMINISTRADOR' AND ativo = 1").get() as { n: number }).n;
+  }
+}
+
+export class SqliteAuditoriaRepository implements AuditoriaRepository {
+  constructor(private readonly db: DatabaseSync) {}
+
+  registrar(quando: string, descricao: string) {
+    this.db.prepare("INSERT INTO auditoria (quando, descricao) VALUES (?, ?)").run(quando, descricao);
+  }
+
+  recentes(limite: number) {
+    return this.db
+      .prepare("SELECT * FROM auditoria ORDER BY id DESC LIMIT ?")
+      .all(limite)
+      .map((l: Linha) => ({ id: l.id as number, quando: l.quando as string, descricao: l.descricao as string }));
   }
 }
 

@@ -9,5 +9,5 @@ export function GET(req: NextRequest) {
 }
 
 export function POST(req: NextRequest) {
-  return rotaAutenticada(req, async ({ sessao, s }) => ({ tutor: s.tutores.cadastrar(sessao, await corpoJson(req)) }), 201);
+  return rotaAutenticada(req, async ({ sessao, s }) => ({ tutor: s.tutores.cadastrar(sessao, await corpoJson(req)) }), { status: 201 });
 }

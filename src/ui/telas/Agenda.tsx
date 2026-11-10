@@ -3,8 +3,8 @@
 // REQ 09 — Consultar agenda (por dia, por semana e por profissional)
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import { dataBR, dataCurta, dataMedia, dataValida, dataPorExtenso, diaCurto, diaDaSemana, diaDoMes, hojeLocal, horaDeMinutos, inicioDaSemana, minutos, somarDias } from "@/lib/datas";
 import { TopoCelular, useCasca } from "../Casca";
 import { CAMINHOS, Traco } from "../icones";
@@ -32,9 +32,15 @@ const atende = (p: Profissional, data: string, hora: string) =>
 
 export function Agenda() {
   const { celular, permissoes } = useCasca();
+  // A data e a visão ficam no endereço (/agenda?data=2026-11-12&visao=semana):
+  // dá para voltar pelo navegador, recarregar a página e compartilhar o link.
+  const router = useRouter();
   const q = useSearchParams();
-  const [visao, setVisao] = useState<Visao>(() => (q.get("visao") === "semana" ? "semana" : "dia"));
-  const [data, setData] = useState(() => (dataValida(q.get("data")) ? q.get("data")! : hojeLocal()));
+  const visaoPedida = q.get("visao");
+  const visao: Visao = visaoPedida === "semana" ? "semana" : visaoPedida === "prof" && !permissoes.agendaPropria ? "prof" : "dia";
+  const data = dataValida(q.get("data")) ? q.get("data")! : hojeLocal();
+  const endereco = (d: string, v: Visao) => `/agenda?data=${d}${v === "dia" ? "" : `&visao=${v}`}`;
+  const setVisao = (v: Visao) => router.push(endereco(data, v));
   const [selecionada, setSelecionada] = useState<number | null>(null);
   const [profSelecionado, setProfSelecionado] = useState<number | null>(null);
   const [folha, setFolha] = useState(false);
@@ -43,11 +49,11 @@ export function Agenda() {
   const { dados, erro, atualizadoAs } = useDados<DadosDaAgenda>(`/api/agenda?de=${segunda}&ate=${somarDias(segunda, 6)}`, 30_000);
 
   const hoje = dados?.hoje ?? hojeLocal();
-  const profissionais = useMemo(() => dados?.profissionais ?? [], [dados]);
-  const todas = useMemo(() => dados?.consultas ?? [], [dados]);
-  const ativas = useMemo(() => todas.filter((c) => c.status !== "Cancelada"), [todas]);
-  const doDia = useMemo(() => ativas.filter((c) => c.data === data), [ativas, data]);
-  const horas = useMemo(() => horasDoDia(profissionais, doDia, data), [profissionais, doDia, data]);
+  const profissionais = dados?.profissionais ?? [];
+  const todas = dados?.consultas ?? [];
+  const ativas = todas.filter((c) => c.status !== "Cancelada");
+  const doDia = ativas.filter((c) => c.data === data);
+  const horas = horasDoDia(profissionais, doDia, data);
   const diasDaSemana = [0, 1, 2, 3, 4, 5].map((n) => somarDias(segunda, n));
   const prof = profissionais.find((p) => p.id === profSelecionado) ?? profissionais[0];
   const doProf = todas.filter((c) => c.data === data && c.profissionalId === prof?.id);
@@ -57,9 +63,9 @@ export function Agenda() {
     ? [["dia", "Dia"], ["semana", "Semana"]]
     : [["dia", "Dia"], ["semana", "Semana"], ["prof", "Por profissional"]];
   const passo = visao === "semana" ? 7 : 1;
-  const irPara = (nova: string) => {
-    setData(nova);
+  const irPara = (nova: string, v: Visao = visao) => {
     setSelecionada(null);
+    router.push(endereco(nova, v));
   };
   const futuro = (dia: string, hora: string) => dia > hoje || (dia === hoje && hora > (dados?.horaAtual ?? "00:00"));
   const titulo = permissoes.agendaPropria ? "Minha agenda" : "Agenda";
@@ -385,10 +391,7 @@ export function Agenda() {
                       <button
                         type="button"
                         title="Abrir este dia"
-                        onClick={() => {
-                          irPara(d);
-                          setVisao("dia");
-                        }}
+                        onClick={() => irPara(d, "dia")}
                         style={{ padding: "14px 12px", background: destaque ? "#0B3A8F" : "#E6EBF5", color: destaque ? "#FFFFFF" : "#0B3A8F", border: 0, textAlign: "left", cursor: "pointer", font: "16px 'Barlow', sans-serif" }}
                       >
                         <div style={{ fontWeight: 700 }}>

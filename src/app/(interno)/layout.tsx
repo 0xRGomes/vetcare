@@ -7,6 +7,8 @@ import { Casca } from "@/ui/Casca";
 export default async function LayoutInterno({ children }: { children: React.ReactNode }) {
   const sessao = await sessaoAtual();
   if (!sessao) redirect("/login");
+  // Senha provisória: nenhuma tela interna abre antes de o usuário definir a própria senha.
+  if (sessao.trocarSenha) redirect("/senha");
   return (
     <Casca sessao={sessao} permissoes={servicos().rbac.permissoes(sessao)}>
       {children}

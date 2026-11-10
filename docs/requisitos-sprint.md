@@ -1,14 +1,27 @@
 # Requisitos da Sprint — Etapa 2
 
-O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **5 deles (29,4%)**, escolhidos para formar um fluxo completo de recepção. A justificativa da seleção está na [ADR-008](adrs/ADR-008-selecao-escopo-etapa-2.md).
+O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **6 deles (35,3%)**, escolhidos para formar um fluxo completo, do cadastro de quem acessa o sistema até a consulta na agenda. A justificativa da seleção está na [ADR-008](adrs/ADR-008-selecao-escopo-etapa-2.md).
 
 ## Requisitos implementados
+
+### REQ 01 — Manter usuário
+
+O administrador inclui, altera, desativa e consulta quem acessa o sistema e com qual perfil.
+
+- Nome, e-mail e perfil são obrigatórios; o e-mail não pode se repetir. O perfil Veterinário é ligado a um veterinário cadastrado, o que define a agenda que ele enxerga.
+- O usuário novo recebe uma senha provisória, exibida uma única vez ao administrador, e é obrigado a definir a própria senha no primeiro acesso.
+- "Excluir acesso" desativa o usuário e encerra a sessão dele na hora; o que ele registrou permanece. O acesso pode ser reativado.
+- O administrador pode gerar nova senha provisória, o que também desfaz o bloqueio por tentativas.
+- Ninguém altera o próprio perfil nem exclui o próprio acesso, e o sistema mantém ao menos um administrador ativo.
+- A tela mostra a situação (Ativo, Bloqueado, Inativo), o último acesso, a matriz de permissões por perfil e a trilha de auditoria das ações de gestão de acesso.
+- Somente o perfil Administrador abre a tela e as rotas.
 
 ### REQ 02 — Autenticar usuário
 
 O usuário entra com e-mail e senha e passa a ver apenas o que seu perfil permite.
 
-- Credenciais corretas abrem o sistema na tela do perfil; credenciais incorretas mostram uma mensagem única, sem revelar se o e-mail existe.
+- O acesso é sempre por e-mail e senha. Credenciais corretas abrem o sistema na tela do perfil; credenciais incorretas mostram uma mensagem única, sem revelar se o e-mail existe.
+- Quem entra com senha provisória só consegue definir a nova senha; qualquer usuário pode alterar a própria senha depois.
 - Após 5 senhas incorretas seguidas, o acesso fica bloqueado por 15 minutos.
 - Telas e rotas internas exigem sessão válida; sem sessão, o usuário é levado ao login. "Sair" encerra a sessão.
 - As permissões seguem a matriz por perfil (Administrador, Recepcionista, Veterinário) e são verificadas no servidor.
@@ -19,6 +32,7 @@ A recepção cadastra, consulta, altera e exclui tutores.
 
 - Nome, CPF (11 dígitos) e telefone são obrigatórios; o CPF não pode se repetir entre tutores ativos.
 - A lista pode ser filtrada por nome, CPF, telefone ou nome de animal.
+- Lista, ficha e formulários têm endereço próprio (`/tutores`, `/tutores/:id`, `/tutores/novo`, `/tutores/:id/editar`).
 - O CPF é exibido mascarado e não pode ser alterado depois do cadastro.
 - A exclusão pede confirmação, remove o tutor e seus animais dos cadastros e cancela as consultas futuras.
 - O perfil Veterinário apenas consulta.
@@ -46,7 +60,7 @@ A recepção agenda uma consulta escolhendo tutor, animal, veterinário, data e 
 Recepção e administração consultam a agenda da clínica; o veterinário consulta a própria.
 
 - Três visões: por dia (grade de horários por veterinário), por semana e por profissional.
-- Navegação por dia ou semana, atalho "Hoje" e escolha direta de data.
+- Navegação por dia ou semana, atalho "Hoje" e escolha direta de data. A data e a visão ficam no endereço (`/agenda?data=...&visao=...`).
 - Selecionar uma consulta mostra horário, tutor, animal, veterinário, motivo e situação.
 - A tela atualiza sozinha a cada 30 segundos. O Início resume as consultas do dia e as próximas chegadas.
 
@@ -54,7 +68,8 @@ Recepção e administração consultam a agenda da clínica; o veterinário cons
 
 | Requisito | Tela | Rotas da API | Serviços (camada de Aplicação) | Testes |
 | --- | --- | --- | --- | --- |
-| REQ 02 | `/login` | `/api/auth/login`, `/api/auth/logout`, `/api/auth/sessao` | `auth`: `AuthService`, `TokenSessionService`, `RBACManager` | "REQ 02 — Autenticar usuário" |
+| REQ 01 | `/usuarios` | `/api/usuarios`, `/api/usuarios/:id`, `/api/usuarios/:id/ativo`, `/api/usuarios/:id/senha` | `auth`: `UsuarioService`, `RBACManager` | "REQ 01 — Manter usuário" |
+| REQ 02 | `/login`, `/senha` | `/api/auth/login`, `/api/auth/logout`, `/api/auth/sessao`, `/api/auth/senha` | `auth`: `AuthService`, `TokenSessionService`, `RBACManager` | "REQ 02 — Autenticar usuário" |
 | REQ 04 | `/tutores` | `/api/tutores`, `/api/tutores/:id` | `cadastros`: `TutorService` | "REQ 04 — Manter tutor" |
 | REQ 05 | `/tutores` | `/api/tutores/:id/animais`, `/api/animais/:id` | `cadastros`: `AnimalService` | "REQ 05 — Manter animal" |
 | REQ 07 | `/agenda/novo` | `/api/consultas`, `/api/agenda/horarios`, `/api/profissionais` | `agendamento`: `AgendamentoService`, `SlotConflictManager` | "REQ 07 — Agendar consulta" |
@@ -66,7 +81,7 @@ Os testes estão em `tests/servicos.test.ts` e rodam com `npm test`.
 
 | Requisito | Funcionalidade | Etapa 2 |
 | --- | --- | --- |
-| REQ 01 | Manter usuário | Não implementado — usuários pré-cadastrados |
+| **REQ 01** | **Manter usuário** | **Implementado** |
 | **REQ 02** | **Autenticar usuário** | **Implementado** |
 | REQ 03 | Recuperar senha | Não implementado |
 | **REQ 04** | **Manter tutor** | **Implementado** |

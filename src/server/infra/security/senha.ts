@@ -1,6 +1,6 @@
 // Camada de Infraestrutura (infra.security) — hash adaptativo de senhas com scrypt (ADR-006 e ADR-010).
 
-import { randomBytes, scrypt, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomInt, scrypt, scryptSync, timingSafeEqual } from "node:crypto";
 import type { HashDeSenha } from "@/server/domain/repositorios";
 
 const CUSTO = 16384; // N
@@ -27,6 +27,12 @@ export const hashScrypt: HashDeSenha = {
     const chaveEsperada = Buffer.from(esperado, "base64");
     const chave = await derivar(senha, Buffer.from(sal, "base64"), Number(n), Number(r), Number(p), chaveEsperada.length);
     return timingSafeEqual(chave, chaveEsperada);
+  },
+
+  gerarProvisoria() {
+    // Sem caracteres que se confundem ao ditar ou copiar (0/O, 1/l/I).
+    const alfabeto = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+    return Array.from({ length: 10 }, () => alfabeto[randomInt(alfabeto.length)]).join("");
   },
 };
 

@@ -2,11 +2,12 @@
 
 import { ErroBloqueado, ErroDeValidacao, ErroNaoAutenticado } from "@/server/domain/erros";
 import type { Sessao } from "@/server/domain/modelos";
-import type { HashDeSenha, Relogio, UsuarioRepository } from "@/server/domain/repositorios";
+import type { AuditoriaRepository, HashDeSenha, Relogio, UsuarioRepository } from "@/server/domain/repositorios";
 import type { TokenSessionService } from "./TokenSessionService";
 
 export const MAX_TENTATIVAS = 5;
 export const BLOQUEIO_EM_MINUTOS = 15;
+export const TAMANHO_MINIMO_DA_SENHA = 8;
 
 const CREDENCIAIS_INVALIDAS = "E-mail ou senha incorretos.";
 
@@ -15,6 +16,7 @@ export class AuthService {
     private readonly usuarios: UsuarioRepository,
     private readonly senhas: HashDeSenha,
     private readonly sessoes: TokenSessionService,
+    private readonly auditoria: AuditoriaRepository,
     private readonly relogio: Relogio,
   ) {}
 
@@ -39,6 +41,7 @@ export class AuthService {
       if (tentativas >= MAX_TENTATIVAS) {
         const ate = new Date(agora.getTime() + BLOQUEIO_EM_MINUTOS * 60000).toISOString();
         this.usuarios.registrarFalhaDeLogin(usuario.id, 0, ate);
+        this.auditoria.registrar(agora.toISOString(), `${MAX_TENTATIVAS} tentativas de login falhas · ${usuario.email} · acesso bloqueado por ${BLOQUEIO_EM_MINUTOS} min`);
         throw new ErroBloqueado(`Acesso bloqueado por ${BLOQUEIO_EM_MINUTOS} min após ${MAX_TENTATIVAS} tentativas incorretas.`);
       }
       this.usuarios.registrarFalhaDeLogin(usuario.id, tentativas, null);
@@ -46,13 +49,29 @@ export class AuthService {
     }
 
     if (usuario.tentativasFalhas > 0 || usuario.bloqueadoAte) this.usuarios.limparFalhasDeLogin(usuario.id);
+    this.usuarios.registrarAcesso(usuario.id, agora.toISOString());
     const sessao: Sessao = {
       usuarioId: usuario.id,
       nome: usuario.nome,
       email: usuario.email,
       perfil: usuario.perfil,
       profissionalId: usuario.profissionalId,
+      trocarSenha: usuario.senhaProvisoria,
     };
     return { token: await this.sessoes.abrir(sessao), sessao };
+  }
+
+  /** O próprio usuário troca a senha; obrigatório no primeiro acesso com senha provisória. */
+  async alterarSenha(sessao: Sessao, senhaAtual: unknown, novaSenha: unknown): Promise<void> {
+    if (typeof senhaAtual !== "string" || typeof novaSenha !== "string") throw new ErroDeValidacao("Informe a senha atual e a nova senha.");
+    if (novaSenha.length < TAMANHO_MINIMO_DA_SENHA) {
+      throw new ErroDeValidacao(`A nova senha precisa ter pelo menos ${TAMANHO_MINIMO_DA_SENHA} caracteres.`, "novaSenha");
+    }
+    const usuario = this.usuarios.buscarPorId(sessao.usuarioId);
+    if (!usuario || !(await this.senhas.conferir(senhaAtual, usuario.senhaHash))) {
+      throw new ErroDeValidacao("A senha atual não confere.", "senhaAtual");
+    }
+    if (novaSenha === senhaAtual) throw new ErroDeValidacao("A nova senha precisa ser diferente da atual.", "novaSenha");
+    this.usuarios.definirSenha(usuario.id, await this.senhas.gerar(novaSenha), false);
   }
 }

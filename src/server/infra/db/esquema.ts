@@ -21,7 +21,15 @@ CREATE TABLE IF NOT EXISTS usuarios (
   ativo             INTEGER NOT NULL DEFAULT 1,
   tentativas_falhas INTEGER NOT NULL DEFAULT 0,
   bloqueado_ate     TEXT,
-  profissional_id   INTEGER REFERENCES profissionais(id)
+  profissional_id   INTEGER REFERENCES profissionais(id),
+  senha_provisoria  INTEGER NOT NULL DEFAULT 0,
+  ultimo_acesso     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS auditoria (
+  id        INTEGER PRIMARY KEY AUTOINCREMENT,
+  quando    TEXT NOT NULL,
+  descricao TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tutores (
@@ -68,3 +76,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_consultas_animal_horario
   ON consultas(animal_id, data, hora) WHERE status <> 'Cancelada';
 CREATE INDEX IF NOT EXISTS ix_consultas_data ON consultas(data, hora);
 `;
+
+/** Colunas acrescentadas depois da primeira versão: [tabela, coluna, definição]. */
+export const COLUNAS_NOVAS: [string, string, string][] = [
+  ["usuarios", "senha_provisoria", "INTEGER NOT NULL DEFAULT 0"],
+  ["usuarios", "ultimo_acesso", "TEXT"],
+];

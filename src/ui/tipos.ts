@@ -5,3 +5,5 @@ export type { Horario } from "@/server/app/agendamento/SlotConflictManager";
 export type { Permissoes } from "@/server/app/auth/RBACManager";
 export type { TutorDTO as Tutor } from "@/server/app/cadastros/TutorService";
 export type { Animal, ConsultaDetalhada as Consulta, Perfil, Profissional, Sessao, StatusConsulta } from "@/server/domain/modelos";
+export type { UsuarioDTO as Usuario } from "@/server/app/auth/UsuarioService";
+export type { UsuarioService } from "@/server/app/auth/UsuarioService";

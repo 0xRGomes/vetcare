@@ -28,6 +28,13 @@ export class TokenSessionService {
     if (!sessao) throw new ErroNaoAutenticado("Sua sessão expirou. Faça login novamente.");
     const usuario = this.usuarios.buscarPorId(sessao.usuarioId);
     if (!usuario || !usuario.ativo) throw new ErroNaoAutenticado("Sua sessão expirou. Faça login novamente.");
-    return { ...sessao, nome: usuario.nome, perfil: usuario.perfil, profissionalId: usuario.profissionalId };
+    return {
+      ...sessao,
+      nome: usuario.nome,
+      email: usuario.email,
+      perfil: usuario.perfil,
+      profissionalId: usuario.profissionalId,
+      trocarSenha: usuario.senhaProvisoria,
+    };
   }
 }

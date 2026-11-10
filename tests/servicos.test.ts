@@ -16,6 +16,7 @@ const AMANHA = "2026-11-11";
 let s: Servicos;
 let recepcao: Sessao;
 let veterinario: Sessao;
+let admin: Sessao;
 
 async function entrar(email: string) {
   return (await s.auth.autenticar(email, SENHA_DE_DEMONSTRACAO)).sessao;
@@ -36,6 +37,66 @@ beforeEach(async () => {
   s = montarServicos(db, relogio);
   recepcao = await entrar("marina.lopes@clinica.com.br");
   veterinario = await entrar("paulo.reis@clinica.com.br");
+  admin = await entrar("beatriz.santos@clinica.com.br");
+});
+
+describe("REQ 01 — Manter usuário", () => {
+  const dados = { nome: "Joana Ribeiro", email: "Joana.Ribeiro@clinica.com.br", perfil: "RECEPCIONISTA" };
+
+  it("cadastra com senha provisória, que precisa ser trocada no primeiro acesso", async () => {
+    const { usuario, senhaProvisoria } = await s.usuarios.cadastrar(admin, dados);
+    assert.equal(usuario.email, "joana.ribeiro@clinica.com.br");
+    assert.equal(usuario.senhaProvisoria, true);
+
+    const { sessao, token } = await s.auth.autenticar(usuario.email, senhaProvisoria);
+    assert.equal(sessao.trocarSenha, true);
+    await assert.rejects(s.auth.alterarSenha(sessao, senhaProvisoria, "curta"), { status: 400 });
+    await assert.rejects(s.auth.alterarSenha(sessao, "errada", "senha-nova-123"), { status: 400 });
+    await s.auth.alterarSenha(sessao, senhaProvisoria, "senha-nova-123");
+
+    assert.equal((await s.sessoes.validar(token)).trocarSenha, false);
+    await assert.rejects(s.auth.autenticar(usuario.email, senhaProvisoria), { status: 401 });
+    assert.equal((await s.auth.autenticar(usuario.email, "senha-nova-123")).sessao.trocarSenha, false);
+  });
+
+  it("valida dados, e-mail duplicado e vínculo do veterinário", async () => {
+    await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, nome: "" }), { status: 400 });
+    await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, email: "marina.lopes@clinica.com.br" }), { status: 409 });
+    await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, perfil: "VETERINARIO" }), { status: 400 });
+    // O profissional 1 (Dr. Paulo Reis) já tem usuário; o 2 (Dra. Camila) está livre.
+    await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, perfil: "VETERINARIO", profissionalId: 1 }), { status: 409 });
+    const { usuario } = await s.usuarios.cadastrar(admin, { ...dados, perfil: "VETERINARIO", profissionalId: 2 });
+    assert.equal(usuario.profissionalId, 2);
+  });
+
+  it("altera, exclui o acesso (encerrando a sessão) e reativa", async () => {
+    const { token } = await s.auth.autenticar("marina.lopes@clinica.com.br", SENHA_DE_DEMONSTRACAO);
+    assert.equal(s.usuarios.atualizar(admin, recepcao.usuarioId, { nome: "Marina L. Lopes", email: recepcao.email, perfil: "RECEPCIONISTA" }).nome, "Marina L. Lopes");
+    assert.equal(s.usuarios.desativar(admin, recepcao.usuarioId).status, "Inativo");
+    await assert.rejects(s.sessoes.validar(token), { status: 401 });
+    await assert.rejects(s.auth.autenticar("marina.lopes@clinica.com.br", SENHA_DE_DEMONSTRACAO), { status: 401 });
+    assert.equal(s.usuarios.reativar(admin, recepcao.usuarioId).status, "Ativo");
+  });
+
+  it("gera nova senha provisória e desfaz o bloqueio por tentativas", async () => {
+    for (let i = 0; i < 5; i++) await assert.rejects(s.auth.autenticar(recepcao.email, "errada"));
+    assert.equal(s.usuarios.painel(admin).usuarios.find((u) => u.id === recepcao.usuarioId)?.status, "Bloqueado");
+    const { senhaProvisoria } = await s.usuarios.redefinirSenha(admin, recepcao.usuarioId);
+    assert.equal((await s.auth.autenticar(recepcao.email, senhaProvisoria)).sessao.trocarSenha, true);
+  });
+
+  it("protege o próprio acesso e o último administrador", () => {
+    assert.equal(status(() => s.usuarios.desativar(admin, admin.usuarioId)), 409);
+    assert.equal(status(() => s.usuarios.atualizar(admin, admin.usuarioId, { nome: admin.nome, email: admin.email, perfil: "RECEPCIONISTA" })), 409);
+  });
+
+  it("somente o administrador gerencia usuários (RBAC) e as ações vão para a auditoria", async () => {
+    assert.equal(status(() => s.usuarios.painel(recepcao)), 403);
+    assert.equal(status(() => s.usuarios.desativar(veterinario, recepcao.usuarioId)), 403);
+    await assert.rejects(s.usuarios.cadastrar(recepcao, dados), { status: 403 });
+    await s.usuarios.cadastrar(admin, dados);
+    assert.match(s.usuarios.painel(admin).auditoria[0].descricao, /Beatriz Santos cadastrou o usuário Joana Ribeiro/);
+  });
 });
 
 describe("REQ 02 — Autenticar usuário", () => {

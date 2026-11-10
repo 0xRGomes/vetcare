@@ -9,7 +9,7 @@
 | [005](ADR-005-monolito-modular.md) | Monolito modular em camadas | 1 | Aceito |
 | [006](ADR-006-autenticacao-jwt-rbac.md) | Autenticação JWT e autorização RBAC | 1 | Aceito |
 | [007](ADR-007-notificacoes-assincronas.md) | Notificações assíncronas aos tutores | 1 | Aceito |
-| [008](ADR-008-selecao-escopo-etapa-2.md) | Escopo funcional da Etapa 2 (5 de 17 requisitos) | 2 | Proposta |
+| [008](ADR-008-selecao-escopo-etapa-2.md) | Escopo funcional da Etapa 2 (6 de 17 requisitos) | 2 | Proposta |
 | [009](ADR-009-tecnologias-de-implementacao.md) | Tecnologias de implementação e mapeamento das camadas | 2 | Proposta |
 | [010](ADR-010-detalhamento-da-autenticacao.md) | Detalhamento e desvios da autenticação (ADR-006) | 2 | Proposta |
 | [011](ADR-011-itens-adiados-e-ajustes-de-interface.md) | Itens da arquitetura adiados e ajustes em relação ao protótipo | 2 | Proposta |
