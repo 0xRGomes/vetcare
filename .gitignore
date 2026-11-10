@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# banco de dados local e segredo JWT gerado em desenvolvimento
+/data
+
+# modelo de variáveis de ambiente (versionado)
+!.env.example

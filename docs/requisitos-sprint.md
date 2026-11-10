@@ -1,0 +1,87 @@
+# Requisitos da Sprint — Etapa 2
+
+O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **5 deles (29,4%)**, escolhidos para formar um fluxo completo de recepção. A justificativa da seleção está na [ADR-008](adrs/ADR-008-selecao-escopo-etapa-2.md).
+
+## Requisitos implementados
+
+### REQ 02 — Autenticar usuário
+
+O usuário entra com e-mail e senha e passa a ver apenas o que seu perfil permite.
+
+- Credenciais corretas abrem o sistema na tela do perfil; credenciais incorretas mostram uma mensagem única, sem revelar se o e-mail existe.
+- Após 5 senhas incorretas seguidas, o acesso fica bloqueado por 15 minutos.
+- Telas e rotas internas exigem sessão válida; sem sessão, o usuário é levado ao login. "Sair" encerra a sessão.
+- As permissões seguem a matriz por perfil (Administrador, Recepcionista, Veterinário) e são verificadas no servidor.
+
+### REQ 04 — Manter tutor
+
+A recepção cadastra, consulta, altera e exclui tutores.
+
+- Nome, CPF (11 dígitos) e telefone são obrigatórios; o CPF não pode se repetir entre tutores ativos.
+- A lista pode ser filtrada por nome, CPF, telefone ou nome de animal.
+- O CPF é exibido mascarado e não pode ser alterado depois do cadastro.
+- A exclusão pede confirmação, remove o tutor e seus animais dos cadastros e cancela as consultas futuras.
+- O perfil Veterinário apenas consulta.
+
+### REQ 05 — Manter animal
+
+A recepção cadastra, altera e exclui animais na ficha do tutor.
+
+- Todo animal é vinculado a um tutor existente.
+- Nome, espécie, sexo e data de nascimento são obrigatórios; a data não pode estar no futuro.
+- Depois de cadastrar um tutor, o formulário de animal abre na própria ficha.
+- A exclusão pede confirmação e cancela as consultas futuras do animal.
+
+### REQ 07 — Agendar consulta
+
+A recepção agenda uma consulta escolhendo tutor, animal, veterinário, data e horário.
+
+- Os horários seguem a jornada e os dias de atendimento do veterinário, em intervalos de 30 minutos; os ocupados aparecem riscados.
+- Não é possível agendar em horário ocupado, passado ou fora da jornada. O conflito é verificado de novo no servidor e garantido por índice único no banco.
+- O mesmo animal não pode ter duas consultas no mesmo horário.
+- A consulta confirmada aparece imediatamente na agenda. O agendamento pode partir da ficha do tutor ou de um horário livre da agenda, com os dados já preenchidos.
+
+### REQ 09 — Consultar agenda
+
+Recepção e administração consultam a agenda da clínica; o veterinário consulta a própria.
+
+- Três visões: por dia (grade de horários por veterinário), por semana e por profissional.
+- Navegação por dia ou semana, atalho "Hoje" e escolha direta de data.
+- Selecionar uma consulta mostra horário, tutor, animal, veterinário, motivo e situação.
+- A tela atualiza sozinha a cada 30 segundos. O Início resume as consultas do dia e as próximas chegadas.
+
+## Rastreabilidade
+
+| Requisito | Tela | Rotas da API | Serviços (camada de Aplicação) | Testes |
+| --- | --- | --- | --- | --- |
+| REQ 02 | `/login` | `/api/auth/login`, `/api/auth/logout`, `/api/auth/sessao` | `auth`: `AuthService`, `TokenSessionService`, `RBACManager` | "REQ 02 — Autenticar usuário" |
+| REQ 04 | `/tutores` | `/api/tutores`, `/api/tutores/:id` | `cadastros`: `TutorService` | "REQ 04 — Manter tutor" |
+| REQ 05 | `/tutores` | `/api/tutores/:id/animais`, `/api/animais/:id` | `cadastros`: `AnimalService` | "REQ 05 — Manter animal" |
+| REQ 07 | `/agenda/novo` | `/api/consultas`, `/api/agenda/horarios`, `/api/profissionais` | `agendamento`: `AgendamentoService`, `SlotConflictManager` | "REQ 07 — Agendar consulta" |
+| REQ 09 | `/agenda`, `/inicio` | `/api/agenda`, `/api/inicio` | `agendamento`: `AgendaQueryEngine` | "REQ 09 — Consultar agenda" |
+
+Os testes estão em `tests/servicos.test.ts` e rodam com `npm test`.
+
+## Situação dos 17 requisitos
+
+| Requisito | Funcionalidade | Etapa 2 |
+| --- | --- | --- |
+| REQ 01 | Manter usuário | Não implementado — usuários pré-cadastrados |
+| **REQ 02** | **Autenticar usuário** | **Implementado** |
+| REQ 03 | Recuperar senha | Não implementado |
+| **REQ 04** | **Manter tutor** | **Implementado** |
+| **REQ 05** | **Manter animal** | **Implementado** |
+| REQ 06 | Manter veterinário | Não implementado — veterinários pré-cadastrados |
+| **REQ 07** | **Agendar consulta** | **Implementado** |
+| REQ 08 | Cancelar consulta | Não implementado |
+| **REQ 09** | **Consultar agenda** | **Implementado** |
+| REQ 10 | Registrar atendimento | Não implementado |
+| REQ 11 | Manter prontuário | Não implementado |
+| REQ 12 | Registrar vacinação | Não implementado |
+| REQ 13 | Emitir prescrição | Não implementado |
+| REQ 14 | Registrar pagamento | Não implementado |
+| REQ 15 | Dashboard financeiro | Não implementado |
+| REQ 16 | Notificar tutor | Não implementado |
+| REQ 17 | Relatórios gerenciais | Não implementado |
+
+Os nomes dos requisitos seguem o protótipo de interface (`docs/prototipo/index.html`). As diferenças entre as telas do protótipo e as do sistema estão na [ADR-011](adrs/ADR-011-itens-adiados-e-ajustes-de-interface.md).

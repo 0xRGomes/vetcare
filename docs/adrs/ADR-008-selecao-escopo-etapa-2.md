@@ -82,6 +82,14 @@ A data registrada representa o momento em que a proposta foi formulada, não a d
 
 Esta ADR é um **registro complementar de decisão de escopo de implementação**. Ela não altera automaticamente a arquitetura da Etapa 1 nem substitui suas decisões aceitas.
 
+## Situação da implementação
+
+Em **10/11/2026** os cinco requisitos deste recorte foram implementados no repositório, seguindo o fluxo descrito acima. A lista de requisitos da Sprint, os critérios de aceite e a rastreabilidade para telas, rotas, serviços e testes estão em [requisitos-sprint.md](../requisitos-sprint.md).
+
+As restrições previstas foram mantidas: usuários (REQ 01) e profissionais (REQ 06) são pré-cadastrados na carga inicial de dados, sem telas de manutenção. As tecnologias adotadas e os desvios em relação à arquitetura da Etapa 1 estão registrados nas ADRs [009](ADR-009-tecnologias-de-implementacao.md), [010](ADR-010-detalhamento-da-autenticacao.md) e [011](ADR-011-itens-adiados-e-ajustes-de-interface.md).
+
+A implementação não altera o estado desta decisão: a confirmação formal do grupo continua pendente.
+
 ## Notas e pontos para revisão
 
 - O planejamento denomina o REQ 06 **Manter profissional**. O Quadro 5 do documento de arquitetura (seção 10.3, página 33) utiliza **Manter veterinário**, enquanto a seção 4.3 utiliza **Gestão de Profissionais** e descreve médicos veterinários. As denominações foram explicitadas sem alterar o requisito histórico.
