@@ -340,6 +340,13 @@ export class SqliteConsultaRepository implements ConsultaRepository {
     return l ? paraConsulta(l) : null;
   }
 
+  cancelar(id: number) {
+    const r = this.db
+      .prepare("UPDATE consultas SET status = 'Cancelada' WHERE id = ? AND status IN ('Agendada','Confirmada')")
+      .run(id);
+    return r.changes === 1;
+  }
+
   cancelarFuturasDoTutor(tutorId: number, aPartirDe: string, hora: string) {
     const r = this.db
       .prepare(

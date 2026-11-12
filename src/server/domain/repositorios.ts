@@ -82,6 +82,7 @@ export interface ConsultaRepository {
   /** Lança ErroDeConflito se o horário do profissional já estiver ocupado. */
   criar(dados: Omit<Consulta, "id" | "status">, criadoPor: number, criadoEm: string): number;
   buscarPorId(id: number): ConsultaDetalhada | null;
+  cancelar(id: number): boolean;
   cancelarFuturasDoTutor(tutorId: number, aPartirDe: string, hora: string): number;
   cancelarFuturasDoAnimal(animalId: number, aPartirDe: string, hora: string): number;
 }

@@ -52,6 +52,24 @@ export class AgendamentoService {
     return this.consultas.buscarPorId(id)!;
   }
 
+  cancelar(sessao: Sessao, id: number): ConsultaDetalhada {
+    this.rbac.exigir(sessao, "agenda", "escrever");
+    if (!Number.isInteger(id) || id < 1) throw new ErroDeValidacao("Consulta inválida.", "id");
+
+    const consulta = this.consultas.buscarPorId(id);
+    if (!consulta) throw new ErroNaoEncontrado("Consulta não encontrada.");
+    if (consulta.status !== "Agendada" && consulta.status !== "Confirmada") {
+      throw new ErroDeConflito("Esta consulta não pode ser cancelada.");
+    }
+
+    const agora = this.relogio.agora();
+    if (consulta.data < agora.data || (consulta.data === agora.data && consulta.hora <= agora.hora)) {
+      throw new ErroDeConflito("Não é possível cancelar uma consulta que já passou.");
+    }
+    if (!this.consultas.cancelar(id)) throw new ErroDeConflito("A consulta não pode mais ser cancelada.");
+    return this.consultas.buscarPorId(id)!;
+  }
+
   private profissional(id: number) {
     const profissional = Number.isInteger(id) ? this.profissionais.buscarPorId(id) : null;
     if (!profissional) throw new ErroNaoEncontrado("Profissional não encontrado.");

@@ -4,8 +4,9 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { dataBR, dataCurta, dataMedia, dataValida, dataPorExtenso, diaCurto, diaDaSemana, diaDoMes, hojeLocal, horaDeMinutos, inicioDaSemana, minutos, somarDias } from "@/lib/datas";
+import { api, mensagemDe } from "../api";
 import { TopoCelular, useCasca } from "../Casca";
 import { CAMINHOS, Traco } from "../icones";
 import { corDoStatus } from "../status";
@@ -44,9 +45,20 @@ export function Agenda() {
   const [selecionada, setSelecionada] = useState<number | null>(null);
   const [profSelecionado, setProfSelecionado] = useState<number | null>(null);
   const [folha, setFolha] = useState(false);
+  const [cancelando, setCancelando] = useState(false);
+  const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
+  const [erroCancelamento, setErroCancelamento] = useState("");
+  const dialogoCancelamento = useRef<HTMLDialogElement>(null);
 
   const segunda = inicioDaSemana(data);
-  const { dados, erro, atualizadoAs } = useDados<DadosDaAgenda>(`/api/agenda?de=${segunda}&ate=${somarDias(segunda, 6)}`, 30_000);
+  const { dados, erro, atualizadoAs, recarregar } = useDados<DadosDaAgenda>(`/api/agenda?de=${segunda}&ate=${somarDias(segunda, 6)}`, 30_000);
+
+  useEffect(() => {
+    const dialogo = dialogoCancelamento.current;
+    if (!dialogo) return;
+    if (confirmandoCancelamento && !dialogo.open) dialogo.showModal();
+    else if (!confirmandoCancelamento && dialogo.open) dialogo.close();
+  }, [confirmandoCancelamento]);
 
   const hoje = dados?.hoje ?? hojeLocal();
   const profissionais = dados?.profissionais ?? [];
@@ -70,6 +82,21 @@ export function Agenda() {
   const futuro = (dia: string, hora: string) => dia > hoje || (dia === hoje && hora > (dados?.horaAtual ?? "00:00"));
   const titulo = permissoes.agendaPropria ? "Minha agenda" : "Agenda";
   const semConsultas = <p className={celular ? "vazio" : "d-vazio"}>Nenhuma consulta {visao === "prof" && prof ? `de ${prof.nome} ` : ""}neste dia.</p>;
+
+  async function cancelarConsulta() {
+    if (!detalhe) return;
+    setCancelando(true);
+    setErroCancelamento("");
+    try {
+      await api(`/api/consultas?id=${detalhe.id}`, { metodo: "DELETE" });
+      setConfirmandoCancelamento(false);
+      await recarregar();
+    } catch (falha) {
+      setErroCancelamento(mensagemDe(falha));
+    } finally {
+      setCancelando(false);
+    }
+  }
 
   const corpoDoDetalhe = detalhe && (
     <>
@@ -97,7 +124,52 @@ export function Agenda() {
       <Link className={celular ? "btn2" : "d-btn2"} href={`/tutores?tutor=${detalhe.tutor.id}`}>
         Ver ficha do tutor
       </Link>
+      {permissoes.agendar &&
+        (detalhe.status === "Agendada" || detalhe.status === "Confirmada") &&
+        futuro(detalhe.data, detalhe.hora) && (
+          <button
+            type="button"
+            className={celular ? "btnd" : "d-btnd"}
+            onClick={() => {
+              setErroCancelamento("");
+              setConfirmandoCancelamento(true);
+            }}
+          >
+            Cancelar consulta
+          </button>
+        )}
     </>
+  );
+
+  const confirmacaoCancelamento = (
+    <dialog
+      ref={dialogoCancelamento}
+      className="cancel-dialog"
+      aria-labelledby="cancel-dialog-title"
+      aria-describedby="cancel-dialog-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!cancelando) setConfirmandoCancelamento(false);
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget && !cancelando) setConfirmandoCancelamento(false);
+      }}
+    >
+      <div className="eyebrow">Atenção</div>
+      <h2 id="cancel-dialog-title">Cancelar consulta?</h2>
+      <p id="cancel-dialog-description">
+        A consulta de <strong>{detalhe?.animal.nome}</strong> será marcada como cancelada. O histórico será mantido e o horário ficará disponível novamente.
+      </p>
+      {erroCancelamento && <p role="alert" className={celular ? "erro" : "danger"}>{erroCancelamento}</p>}
+      <div className="cancel-dialog-actions">
+        <button type="button" className={celular ? "btn2" : "d-btn2"} disabled={cancelando} onClick={() => setConfirmandoCancelamento(false)}>
+          Manter consulta
+        </button>
+        <button type="button" className={celular ? "btnD" : "d-btnD"} disabled={cancelando} onClick={() => void cancelarConsulta()}>
+          {cancelando ? "Cancelando…" : "Confirmar cancelamento"}
+        </button>
+      </div>
+    </dialog>
   );
 
   if (celular) {
@@ -280,6 +352,7 @@ export function Agenda() {
             </section>
           </>
         )}
+        {confirmacaoCancelamento}
       </>
     );
   }
@@ -466,6 +539,7 @@ export function Agenda() {
           </aside>
         )}
       </div>
+      {confirmacaoCancelamento}
     </>
   );
 }

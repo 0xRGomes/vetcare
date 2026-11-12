@@ -202,6 +202,27 @@ describe("REQ 07 — Agendar consulta", () => {
   });
 });
 
+describe("REQ 08 — Cancelar consulta", () => {
+  const pedido = { animalId: 1, profissionalId: 1, data: AMANHA, hora: "16:30", motivo: "Retorno" };
+
+  it("marca como cancelada, mantém o histórico e libera o horário", () => {
+    const criada = s.agendamento.agendar(recepcao, pedido);
+    const cancelada = s.agendamento.cancelar(recepcao, criada.id);
+
+    assert.equal(cancelada.status, "Cancelada");
+    assert.equal(s.agenda.consultar(recepcao, AMANHA, AMANHA).consultas.find((c) => c.id === criada.id)?.status, "Cancelada");
+    assert.equal(s.agendamento.horariosDisponiveis(recepcao, 1, AMANHA).horarios.find((h) => h.hora === "16:30")?.ocupado, false);
+    assert.equal(s.agendamento.agendar(recepcao, pedido).status, "Agendada");
+  });
+
+  it("permite cancelamento pela recepção e administração, mas não pelo veterinário", () => {
+    const criada = s.agendamento.agendar(recepcao, pedido);
+    assert.equal(status(() => s.agendamento.cancelar(veterinario, criada.id)), 403);
+    assert.equal(s.agendamento.cancelar(admin, criada.id).status, "Cancelada");
+    assert.equal(status(() => s.agendamento.cancelar(recepcao, criada.id)), 409);
+  });
+});
+
 describe("REQ 09 — Consultar agenda", () => {
   it("recepção consulta dia, semana e por profissional", () => {
     const dia = s.agenda.consultar(recepcao, "2026-11-10", "2026-11-10");

@@ -3,7 +3,7 @@
 Sistema de gestão para clínica veterinária — **Trabalho II (Etapa 2): implementação**.
 Disciplina Engenharia de Software I · Instituto de Computação · UFBA · Profa. Dra. Larissa Barbosa Leôncio Pinheiro.
 
-Esta etapa implementa 6 dos 17 requisitos funcionais do Documento de Requisitos (35,3%), formando um fluxo completo: o administrador cadastra quem acessa o sistema; a recepção entra, cadastra o tutor e o animal, agenda a consulta e a vê na agenda.
+Esta etapa implementa 7 dos 17 requisitos funcionais do Documento de Requisitos (41,2%), formando um fluxo completo: o administrador cadastra quem acessa o sistema; a recepção entra, cadastra o tutor e o animal, agenda ou cancela a consulta e a vê na agenda.
 
 | Requisito | Funcionalidade | Tela |
 | --- | --- | --- |
@@ -12,6 +12,7 @@ Esta etapa implementa 6 dos 17 requisitos funcionais do Documento de Requisitos 
 | REQ 04 | Manter tutor | `/tutores`, `/tutores/novo`, `/tutores/:id` |
 | REQ 05 | Manter animal | `/tutores/:id/animais/novo` (ficha do tutor) |
 | REQ 07 | Agendar consulta | `/agenda/novo` |
+| REQ 08 | Cancelar consulta | `/agenda` |
 | REQ 09 | Consultar agenda | `/agenda` e `/inicio` |
 
 Detalhes, critérios de aceite e rastreabilidade: [docs/requisitos-sprint.md](docs/requisitos-sprint.md).
@@ -93,6 +94,7 @@ Todas as rotas, exceto o login, exigem sessão válida.
 | `GET /api/profissionais` | — | Veterinários disponíveis para agendamento |
 | `GET /api/agenda/horarios?profissional=&data=` | REQ 07 | Horários livres e ocupados |
 | `POST /api/consultas` | REQ 07 | Agendar consulta (409 em caso de conflito) |
+| `DELETE /api/consultas?id=` | REQ 08 | Cancelar consulta futura sem remover o histórico |
 | `GET /api/agenda?de=&ate=&profissional=` | REQ 09 | Consultas do período |
 | `GET /api/inicio` | REQ 09 | Resumo do dia da recepção |
 

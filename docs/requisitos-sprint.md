@@ -1,6 +1,6 @@
 # Requisitos da Sprint — Etapa 2
 
-O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **6 deles (35,3%)**, escolhidos para formar um fluxo completo, do cadastro de quem acessa o sistema até a consulta na agenda. A justificativa da seleção está na [ADR-008](adrs/ADR-008-selecao-escopo-etapa-2.md).
+O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **7 deles (41,2%)**, escolhidos para formar um fluxo completo, do cadastro de quem acessa o sistema até a consulta na agenda. A justificativa da seleção está na [ADR-008](adrs/ADR-008-selecao-escopo-etapa-2.md).
 
 ## Requisitos implementados
 
@@ -55,6 +55,14 @@ A recepção agenda uma consulta escolhendo tutor, animal, veterinário, data e 
 - O mesmo animal não pode ter duas consultas no mesmo horário.
 - A consulta confirmada aparece imediatamente na agenda. O agendamento pode partir da ficha do tutor ou de um horário livre da agenda, com os dados já preenchidos.
 
+### REQ 08 — Cancelar consulta
+
+A recepção ou administração pode cancelar consultas futuras Agendadas ou Confirmadas diretamente pela agenda.
+
+- O cancelamento exige confirmação, preserva a consulta no histórico com situação Cancelada e libera o horário.
+- Consultas passadas, em andamento, concluídas ou já canceladas não podem ser canceladas novamente.
+- O perfil Veterinário apenas consulta a própria agenda; tutores não precisam de contas no sistema.
+
 ### REQ 09 — Consultar agenda
 
 Recepção e administração consultam a agenda da clínica; o veterinário consulta a própria.
@@ -73,6 +81,7 @@ Recepção e administração consultam a agenda da clínica; o veterinário cons
 | REQ 04 | `/tutores` | `/api/tutores`, `/api/tutores/:id` | `cadastros`: `TutorService` | "REQ 04 — Manter tutor" |
 | REQ 05 | `/tutores` | `/api/tutores/:id/animais`, `/api/animais/:id` | `cadastros`: `AnimalService` | "REQ 05 — Manter animal" |
 | REQ 07 | `/agenda/novo` | `/api/consultas`, `/api/agenda/horarios`, `/api/profissionais` | `agendamento`: `AgendamentoService`, `SlotConflictManager` | "REQ 07 — Agendar consulta" |
+| REQ 08 | `/agenda` | `DELETE /api/consultas?id=` | `agendamento`: `AgendamentoService` | "REQ 08 — Cancelar consulta" |
 | REQ 09 | `/agenda`, `/inicio` | `/api/agenda`, `/api/inicio` | `agendamento`: `AgendaQueryEngine` | "REQ 09 — Consultar agenda" |
 
 Os testes estão em `tests/servicos.test.ts` e rodam com `npm test`.
@@ -88,7 +97,7 @@ Os testes estão em `tests/servicos.test.ts` e rodam com `npm test`.
 | **REQ 05** | **Manter animal** | **Implementado** |
 | REQ 06 | Manter veterinário | Não implementado — veterinários pré-cadastrados |
 | **REQ 07** | **Agendar consulta** | **Implementado** |
-| REQ 08 | Cancelar consulta | Não implementado |
+| **REQ 08** | **Cancelar consulta** | **Implementado** |
 | **REQ 09** | **Consultar agenda** | **Implementado** |
 | REQ 10 | Registrar atendimento | Não implementado |
 | REQ 11 | Manter prontuário | Não implementado |
