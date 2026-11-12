@@ -59,14 +59,14 @@ describe("REQ 01 — Manter usuário", () => {
     assert.equal((await s.auth.autenticar(usuario.email, "senha-nova-123")).sessao.trocarSenha, false);
   });
 
-  it("valida dados, e-mail duplicado e vínculo do veterinário", async () => {
+  it("valida dados e direciona o cadastro veterinário ao fluxo próprio", async () => {
     await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, nome: "" }), { status: 400 });
     await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, email: "marina.lopes@clinica.com.br" }), { status: 409 });
-    await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, perfil: "VETERINARIO" }), { status: 400 });
-    // O profissional 1 (Dr. Paulo Reis) já tem usuário; o 2 (Dra. Camila) está livre.
-    await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, perfil: "VETERINARIO", profissionalId: 1 }), { status: 409 });
-    const { usuario } = await s.usuarios.cadastrar(admin, { ...dados, perfil: "VETERINARIO", profissionalId: 2 });
-    assert.equal(usuario.profissionalId, 2);
+    await assert.rejects(s.usuarios.cadastrar(admin, { ...dados, perfil: "VETERINARIO", profissionalId: 2 }), { status: 409 });
+    assert.equal(
+      status(() => s.usuarios.atualizar(admin, recepcao.usuarioId, { ...dados, perfil: "VETERINARIO", profissionalId: 2 })),
+      409,
+    );
   });
 
   it("altera, exclui o acesso (encerrando a sessão) e reativa", async () => {
@@ -168,6 +168,88 @@ describe("REQ 05 — Manter animal", () => {
   });
 });
 
+describe("REQ 06 — Manter veterinário", () => {
+  const dados = {
+    nome: "Dra. Fernanda Lima",
+    crmv: "07788",
+    especialidade: "Clínica geral",
+    dias: [1, 2, 3, 4, 5],
+    horaInicio: "08:00",
+    horaFim: "17:00",
+    email: "fernanda.lima@clinica.com.br",
+  };
+
+  it("cadastra profissional e conta vinculada com senha provisória e atualiza os dados da conta", async () => {
+    const criado = await s.profissionais.cadastrar(admin, dados);
+    assert.equal(criado.profissional.nome, dados.nome);
+    assert.ok(s.profissionais.listar(recepcao).some((p) => p.id === criado.profissional.id));
+
+    const acesso = await s.auth.autenticar(dados.email, criado.senhaProvisoria);
+    assert.equal(acesso.sessao.perfil, "VETERINARIO");
+    assert.equal(acesso.sessao.profissionalId, criado.profissional.id);
+    assert.equal(acesso.sessao.trocarSenha, true);
+
+    const atualizado = s.profissionais.atualizar(admin, criado.profissional.id, { ...dados, nome: "Dra. Fernanda Gomes", dias: [2, 4], horaFim: "16:00" });
+    assert.deepEqual(atualizado.dias, [2, 4]);
+    assert.equal(atualizado.horaFim, "16:00");
+    assert.equal(s.usuarios.painel(admin).usuarios.find((u) => u.email === dados.email)?.nome, "Dra. Fernanda Gomes");
+  });
+
+  it("mantém o perfil e o vínculo da agenda sob gestão do cadastro de veterinários", async () => {
+    const criado = await s.profissionais.cadastrar(admin, dados);
+    const usuario = s.usuarios.painel(admin).usuarios.find((u) => u.email === dados.email)!;
+
+    const atualizado = s.usuarios.atualizar(admin, usuario.id, {
+      nome: dados.nome,
+      email: dados.email,
+      perfil: "VETERINARIO",
+      profissionalId: 1,
+    });
+    assert.equal(atualizado.profissionalId, criado.profissional.id);
+    assert.equal(
+      status(() => s.usuarios.atualizar(admin, usuario.id, { nome: dados.nome, email: dados.email, perfil: "RECEPCIONISTA" })),
+      409,
+    );
+  });
+
+  it("valida os campos e restringe a manutenção à administração", async () => {
+    await assert.rejects(s.profissionais.cadastrar(recepcao, dados), { status: 403 });
+    await assert.rejects(s.profissionais.cadastrar(admin, { ...dados, dias: [] }), { status: 400 });
+    await assert.rejects(s.profissionais.cadastrar(admin, { ...dados, horaInicio: "17:00", horaFim: "08:00" }), { status: 400 });
+
+    await s.profissionais.cadastrar(admin, dados);
+    await assert.rejects(s.profissionais.cadastrar(admin, { ...dados, email: "outra.pessoa@clinica.com.br" }), { status: 409 });
+    await assert.rejects(s.profissionais.cadastrar(admin, { ...dados, crmv: "09999" }), { status: 409 });
+  });
+
+  it("impede alterações de horário que invalidariam consultas futuras", async () => {
+    const criado = await s.profissionais.cadastrar(admin, dados);
+    const consulta = s.agendamento.agendar(recepcao, { animalId: 1, profissionalId: criado.profissional.id, data: AMANHA, hora: "16:30", motivo: "Retorno" });
+
+    assert.throws(
+      () => s.profissionais.atualizar(admin, criado.profissional.id, { ...dados, dias: [1, 2, 4, 5], horaFim: "16:00" }),
+      { status: 409 },
+    );
+    assert.equal(s.profissionais.listar(recepcao).find((p) => p.id === criado.profissional.id)?.horaFim, "17:00");
+
+    s.agendamento.cancelar(recepcao, consulta.id);
+    assert.equal(s.profissionais.atualizar(admin, criado.profissional.id, { ...dados, dias: [1, 2, 4, 5], horaFim: "16:00" }).horaFim, "16:00");
+  });
+
+  it("impede remover quem tem consultas futuras e desativa o acesso após o cancelamento", async () => {
+    const criado = await s.profissionais.cadastrar(admin, dados);
+    const consulta = s.agendamento.agendar(recepcao, { animalId: 1, profissionalId: criado.profissional.id, data: AMANHA, hora: "16:30", motivo: "Retorno" });
+
+    assert.throws(() => s.profissionais.desativar(admin, criado.profissional.id), { status: 409 });
+    s.agendamento.cancelar(recepcao, consulta.id);
+    s.profissionais.desativar(admin, criado.profissional.id);
+
+    assert.ok(!s.profissionais.listar(recepcao).some((p) => p.id === criado.profissional.id));
+    await assert.rejects(s.auth.autenticar(dados.email, criado.senhaProvisoria), { status: 401 });
+    assert.equal(s.usuarios.painel(admin).usuarios.find((u) => u.email === dados.email)?.status, "Inativo");
+  });
+});
+
 describe("REQ 07 — Agendar consulta", () => {
   const pedido = { animalId: 1, profissionalId: 1, data: AMANHA, hora: "16:30", motivo: "Retorno" };
 
@@ -232,11 +314,22 @@ describe("REQ 09 — Consultar agenda", () => {
     assert.ok(semana.consultas.length > dia.consultas.length);
     const camila = s.agenda.consultar(recepcao, "2026-11-10", "2026-11-10", 2);
     assert.ok(camila.consultas.length > 0 && camila.consultas.every((c) => c.profissionalId === 2));
+
+    const consultaCancelada = s.agendamento.agendar(recepcao, { animalId: 1, profissionalId: 1, data: "2026-11-20", hora: "16:30", motivo: "Retorno" });
+    s.agendamento.cancelar(recepcao, consultaCancelada.id);
+    const futurasDoPaulo = s.agenda.consultarTodasFuturasDoProfissional(recepcao, 1);
+    assert.equal(status(() => s.agenda.consultarTodasFuturasDoProfissional(recepcao)), 400);
+    assert.ok(futurasDoPaulo.consultas.some((c) => c.data > "2026-11-15"));
+    assert.ok(futurasDoPaulo.consultas.every((c) => c.profissionalId === 1 && c.status !== "Cancelada" && c.status !== "Concluída"));
+    assert.ok(!futurasDoPaulo.consultas.some((c) => c.id === consultaCancelada.id));
   });
 
   it("veterinário enxerga apenas a própria agenda", () => {
     const agenda = s.agenda.consultar(veterinario, "2026-11-09", "2026-11-15");
     assert.ok(agenda.consultas.length > 0 && agenda.consultas.every((c) => c.profissionalId === veterinario.profissionalId));
+    const futuras = s.agenda.consultarTodasFuturasDoProfissional(veterinario);
+    assert.ok(futuras.consultas.length > 0 && futuras.consultas.every((c) => c.profissionalId === veterinario.profissionalId));
+    assert.equal(status(() => s.agenda.consultarTodasFuturasDoProfissional(veterinario, 2)), 403);
     assert.equal(status(() => s.agenda.consultar(veterinario, "2026-11-10", "2026-11-10", 2)), 403);
     assert.equal(status(() => s.agenda.resumoDoDia(veterinario)), 403);
   });

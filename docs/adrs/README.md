@@ -13,6 +13,7 @@
 | [009](ADR-009-tecnologias-de-implementacao.md) | Tecnologias de implementação e mapeamento das camadas | 2 | Proposta |
 | [010](ADR-010-detalhamento-da-autenticacao.md) | Detalhamento e desvios da autenticação (ADR-006) | 2 | Proposta |
 | [011](ADR-011-itens-adiados-e-ajustes-de-interface.md) | Itens da arquitetura adiados e ajustes em relação ao protótipo | 2 | Proposta |
+| [012](ADR-012-cadastro-de-veterinarios-em-fluxo-dedicado.md) | Cadastro de veterinários em fluxo dedicado | 2 | Aceito |
 
 As ADRs 008 a 011 registram o que mudou ou foi detalhado na Etapa 2 em relação à arquitetura da Etapa 1. Elas descrevem o que está implementado no repositório e permanecem como **Proposta** até a confirmação formal do grupo.
 

@@ -10,6 +10,7 @@ import {
   SqliteConsultaRepository,
   SqliteProfissionalRepository,
   SqliteTutorRepository,
+  SqliteTransacaoRepository,
   SqliteUsuarioRepository,
 } from "@/server/infra/db/repositorios";
 import type { Relogio } from "@/server/domain/repositorios";
@@ -48,6 +49,7 @@ export function montarServicos(db: DatabaseSync, relogio: Relogio = relogioDoSis
 
   const usuarios = new SqliteUsuarioRepository(db);
   const profissionais = new SqliteProfissionalRepository(db);
+  const transacao = new SqliteTransacaoRepository(db);
   const tutores = new SqliteTutorRepository(db);
   const animais = new SqliteAnimalRepository(db);
   const consultas = new SqliteConsultaRepository(db);
@@ -64,7 +66,7 @@ export function montarServicos(db: DatabaseSync, relogio: Relogio = relogioDoSis
     usuarios: new UsuarioService(usuarios, profissionais, hashScrypt, auditoria, rbac, relogio),
     tutores: new TutorService(tutores, consultas, rbac, relogio),
     animais: new AnimalService(animais, tutores, consultas, rbac, relogio),
-    profissionais: new ProfissionalService(profissionais, rbac),
+    profissionais: new ProfissionalService(profissionais, usuarios, consultas, hashScrypt, auditoria, transacao, rbac, relogio),
     agendamento: new AgendamentoService(consultas, animais, profissionais, conflitos, rbac, relogio),
     agenda: new AgendaQueryEngine(consultas, profissionais, tutores, animais, rbac, relogio),
   };

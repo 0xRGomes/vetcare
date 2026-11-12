@@ -21,7 +21,9 @@ import type {
   ConsultaRepository,
   DadosUsuario,
   ProfissionalRepository,
+  DadosProfissional,
   TutorRepository,
+  TransacaoRepository,
   UsuarioRepository,
 } from "@/server/domain/repositorios";
 import { emTransacao } from "./conexao";
@@ -126,10 +128,17 @@ export class SqliteUsuarioRepository implements UsuarioRepository {
   }
 
   criar(d: DadosUsuario, senhaHash: string) {
-    const r = this.db
-      .prepare("INSERT INTO usuarios (nome, email, senha_hash, perfil, profissional_id, senha_provisoria) VALUES (?, ?, ?, ?, ?, 1)")
-      .run(d.nome, d.email, senhaHash, d.perfil, d.profissionalId);
-    return Number(r.lastInsertRowid);
+    try {
+      const r = this.db
+        .prepare("INSERT INTO usuarios (nome, email, senha_hash, perfil, profissional_id, senha_provisoria) VALUES (?, ?, ?, ?, ?, 1)")
+        .run(d.nome, d.email, senhaHash, d.perfil, d.profissionalId);
+      return Number(r.lastInsertRowid);
+    } catch (erro) {
+      if (/UNIQUE constraint failed: usuarios\.email/.test(String((erro as Error)?.message))) {
+        throw new ErroDeConflito("Já existe um usuário com este e-mail.");
+      }
+      throw erro;
+    }
   }
 
   atualizar(id: number, d: DadosUsuario) {
@@ -176,6 +185,50 @@ export class SqliteProfissionalRepository implements ProfissionalRepository {
   buscarPorId(id: number) {
     const l = this.db.prepare("SELECT * FROM profissionais WHERE id = ? AND ativo = 1").get(id);
     return l ? paraProfissional(l) : null;
+  }
+
+  buscarPorCrmv(crmv: string) {
+    const l = this.db.prepare("SELECT * FROM profissionais WHERE crmv = ?").get(crmv);
+    return l ? paraProfissional(l) : null;
+  }
+
+  criar(dados: DadosProfissional) {
+    try {
+      const r = this.db
+        .prepare("INSERT INTO profissionais (nome, crmv, especialidade, dias, hora_inicio, hora_fim) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(dados.nome, dados.crmv, dados.especialidade, dados.dias.join(","), dados.horaInicio, dados.horaFim);
+      return Number(r.lastInsertRowid);
+    } catch (erro) {
+      if (/UNIQUE constraint failed: profissionais\.crmv/.test(String((erro as Error)?.message))) {
+        throw new ErroDeConflito("Já existe um veterinário cadastrado com este CRMV.");
+      }
+      throw erro;
+    }
+  }
+
+  atualizar(id: number, dados: DadosProfissional) {
+    try {
+      this.db
+        .prepare("UPDATE profissionais SET nome = ?, crmv = ?, especialidade = ?, dias = ?, hora_inicio = ?, hora_fim = ? WHERE id = ? AND ativo = 1")
+        .run(dados.nome, dados.crmv, dados.especialidade, dados.dias.join(","), dados.horaInicio, dados.horaFim, id);
+    } catch (erro) {
+      if (/UNIQUE constraint failed: profissionais\.crmv/.test(String((erro as Error)?.message))) {
+        throw new ErroDeConflito("Já existe um veterinário cadastrado com este CRMV.");
+      }
+      throw erro;
+    }
+  }
+
+  desativar(id: number) {
+    this.db.prepare("UPDATE profissionais SET ativo = 0 WHERE id = ? AND ativo = 1").run(id);
+  }
+}
+
+export class SqliteTransacaoRepository implements TransacaoRepository {
+  constructor(private readonly db: DatabaseSync) {}
+
+  executar<T>(operacao: () => T) {
+    return emTransacao(this.db, operacao);
   }
 }
 
@@ -305,6 +358,18 @@ export class SqliteConsultaRepository implements ConsultaRepository {
       .map(paraConsulta);
   }
 
+  listarFuturasDoProfissional(profissionalId: number, hoje: string, horaAtual: string) {
+    return this.db
+      .prepare(
+        `${SELECT_CONSULTA}
+          WHERE c.profissional_id = ? AND c.status NOT IN ('Cancelada','Concluída')
+            AND (c.data > ? OR (c.data = ? AND (c.hora >= ? OR c.status IN ('Aguardando','Em atendimento'))))
+          ORDER BY c.data, c.hora`,
+      )
+      .all(profissionalId, hoje, hoje, horaAtual)
+      .map(paraConsulta);
+  }
+
   horariosOcupados(profissionalId: number, data: string) {
     return this.db
       .prepare("SELECT hora FROM consultas WHERE profissional_id = ? AND data = ? AND status <> 'Cancelada' ORDER BY hora")
@@ -345,6 +410,28 @@ export class SqliteConsultaRepository implements ConsultaRepository {
       .prepare("UPDATE consultas SET status = 'Cancelada' WHERE id = ? AND status IN ('Agendada','Confirmada')")
       .run(id);
     return r.changes === 1;
+  }
+
+  temConsultasFuturasDoProfissional(profissionalId: number, aPartirDe: string, hora: string) {
+    return !!this.db
+      .prepare(
+        "SELECT 1 FROM consultas WHERE profissional_id = ? AND status NOT IN ('Cancelada','Concluída') AND (data > ? OR (data = ? AND hora > ?)) LIMIT 1",
+      )
+      .get(profissionalId, aPartirDe, aPartirDe, hora);
+  }
+
+  temConsultasFuturasForaDoHorario(profissionalId: number, aPartirDe: string, horaAtual: string, dias: number[], horaInicio: string, horaFim: string) {
+    const parametrosDosDias = dias.map(() => "?").join(",");
+    return !!this.db
+      .prepare(
+        `SELECT 1 FROM consultas
+          WHERE profissional_id = ? AND status NOT IN ('Cancelada','Concluída')
+            AND (data > ? OR (data = ? AND hora > ?))
+            AND (strftime('%w', data) NOT IN (${parametrosDosDias})
+              OR hora < ? OR time(hora, '+30 minutes') > ?)
+          LIMIT 1`,
+      )
+      .get(profissionalId, aPartirDe, aPartirDe, horaAtual, ...dias.map(String), horaInicio, horaFim);
   }
 
   cancelarFuturasDoTutor(tutorId: number, aPartirDe: string, hora: string) {

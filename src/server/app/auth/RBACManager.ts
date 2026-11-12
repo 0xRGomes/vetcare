@@ -56,6 +56,7 @@ export class RBACManager {
       editarCadastros: this.pode(sessao.perfil, "tutores-e-animais", "escrever"),
       agendaPropria: this.nivel(sessao.perfil, "agenda") === "propria-agenda",
       usuarios: this.pode(sessao.perfil, "usuarios", "escrever"),
+      gerenciarVeterinarios: this.pode(sessao.perfil, "veterinarios", "escrever"),
     };
   }
 }

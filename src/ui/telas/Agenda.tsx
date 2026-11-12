@@ -14,6 +14,7 @@ import type { Agenda as DadosDaAgenda, Consulta, Profissional } from "../tipos";
 import { useDados } from "../useDados";
 
 type Visao = "dia" | "semana" | "prof";
+type EscopoProfissional = "dia" | "futuras";
 
 const PASSO = 30;
 
@@ -41,14 +42,19 @@ export function Agenda() {
   const visao: Visao = visaoPedida === "semana" ? "semana" : visaoPedida === "prof" && !permissoes.agendaPropria ? "prof" : "dia";
   const data = dataValida(q.get("data")) ? q.get("data")! : hojeLocal();
   const endereco = (d: string, v: Visao) => `/agenda?data=${d}${v === "dia" ? "" : `&visao=${v}`}`;
-  const setVisao = (v: Visao) => router.push(endereco(data, v));
   const [selecionada, setSelecionada] = useState<number | null>(null);
   const [profSelecionado, setProfSelecionado] = useState<number | null>(null);
+  const [escopoProfissional, setEscopoProfissional] = useState<EscopoProfissional>("dia");
   const [folha, setFolha] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [confirmandoCancelamento, setConfirmandoCancelamento] = useState(false);
   const [erroCancelamento, setErroCancelamento] = useState("");
   const dialogoCancelamento = useRef<HTMLDialogElement>(null);
+  const setVisao = (v: Visao) => {
+    setSelecionada(null);
+    setFolha(false);
+    router.push(endereco(data, v));
+  };
 
   const segunda = inicioDaSemana(data);
   const { dados, erro, atualizadoAs, recarregar } = useDados<DadosDaAgenda>(`/api/agenda?de=${segunda}&ate=${somarDias(segunda, 6)}`, 30_000);
@@ -68,8 +74,23 @@ export function Agenda() {
   const horas = horasDoDia(profissionais, doDia, data);
   const diasDaSemana = [0, 1, 2, 3, 4, 5].map((n) => somarDias(segunda, n));
   const prof = profissionais.find((p) => p.id === profSelecionado) ?? profissionais[0];
-  const doProf = todas.filter((c) => c.data === data && c.profissionalId === prof?.id);
-  const detalhe = todas.find((c) => c.id === selecionada) ?? null;
+  const urlFuturasDoProf = visao === "prof" && escopoProfissional === "futuras" && prof
+    ? `/api/agenda?todas=1&profissional=${prof.id}`
+    : null;
+  const {
+    dados: agendaFuturaDoProf,
+    erro: erroAgendaFuturaDoProf,
+    carregando: carregandoAgendaFuturaDoProf,
+    recarregar: recarregarAgendaFuturaDoProf,
+  } = useDados<DadosDaAgenda>(urlFuturasDoProf, 30_000);
+  const doProfDia = todas.filter((c) => c.data === data && c.profissionalId === prof?.id);
+  const doProf = escopoProfissional === "futuras"
+    ? agendaFuturaDoProf?.consultas.filter((c) => c.profissionalId === prof?.id) ?? []
+    : doProfDia;
+  const detalhe = todas.find((c) => c.id === selecionada)
+    ?? (visao === "prof" && escopoProfissional === "futuras"
+      ? agendaFuturaDoProf?.consultas.find((c) => c.id === selecionada) ?? null
+      : null);
 
   const visoes: [Visao, string][] = permissoes.agendaPropria
     ? [["dia", "Dia"], ["semana", "Semana"]]
@@ -77,11 +98,23 @@ export function Agenda() {
   const passo = visao === "semana" ? 7 : 1;
   const irPara = (nova: string, v: Visao = visao) => {
     setSelecionada(null);
+    setFolha(false);
     router.push(endereco(nova, v));
+  };
+  const mudarEscopoProfissional = (escopo: EscopoProfissional) => {
+    setSelecionada(null);
+    setFolha(false);
+    setEscopoProfissional(escopo);
+  };
+  const selecionarProfissional = (id: number) => {
+    setSelecionada(null);
+    setFolha(false);
+    setProfSelecionado(id);
   };
   const futuro = (dia: string, hora: string) => dia > hoje || (dia === hoje && hora > (dados?.horaAtual ?? "00:00"));
   const titulo = permissoes.agendaPropria ? "Minha agenda" : "Agenda";
   const semConsultas = <p className={celular ? "vazio" : "d-vazio"}>Nenhuma consulta {visao === "prof" && prof ? `de ${prof.nome} ` : ""}neste dia.</p>;
+  const semConsultasFuturas = <p className={celular ? "vazio" : "d-vazio"}>Nenhuma consulta futura {prof ? `de ${prof.nome} ` : ""}encontrada.</p>;
 
   async function cancelarConsulta() {
     if (!detalhe) return;
@@ -90,7 +123,7 @@ export function Agenda() {
     try {
       await api(`/api/consultas?id=${detalhe.id}`, { metodo: "DELETE" });
       setConfirmandoCancelamento(false);
-      await recarregar();
+      await Promise.all([recarregar(), recarregarAgendaFuturaDoProf()]);
     } catch (falha) {
       setErroCancelamento(mensagemDe(falha));
     } finally {
@@ -189,24 +222,26 @@ export function Agenda() {
           <div>
             <div className="eyebrow">REQ 09 · Consultar agenda</div>
             <h2 className="h1" style={{ marginTop: 4 }}>
-              {dataMedia(data)}
+              {visao === "prof" && escopoProfissional === "futuras" ? "Todas as consultas futuras" : dataMedia(data)}
             </h2>
             <span className="mono small muted">{atualizadoAs ? `Atualizado às ${atualizadoAs}` : "Carregando…"}</span>
           </div>
-          <div className="chips" aria-label="Dias">
-            <button type="button" className="day" style={{ flexBasis: 40 }} aria-label="Semana anterior" onClick={() => irPara(somarDias(data, -7))}>
-              ‹
-            </button>
-            {diasDaSemana.map((d) => (
-              <button key={d} type="button" className={d === data ? "day on" : "day"} aria-pressed={d === data} onClick={() => irPara(d)}>
-                {diaCurto(d)}
-                <b>{diaDoMes(d)}</b>
+          {!(visao === "prof" && escopoProfissional === "futuras") && (
+            <div className="chips" aria-label="Dias">
+              <button type="button" className="day" style={{ flexBasis: 40 }} aria-label="Semana anterior" onClick={() => irPara(somarDias(data, -7))}>
+                ‹
               </button>
-            ))}
-            <button type="button" className="day" style={{ flexBasis: 40 }} aria-label="Próxima semana" onClick={() => irPara(somarDias(data, 7))}>
-              ›
-            </button>
-          </div>
+              {diasDaSemana.map((d) => (
+                <button key={d} type="button" className={d === data ? "day on" : "day"} aria-pressed={d === data} onClick={() => irPara(d)}>
+                  {diaCurto(d)}
+                  <b>{diaDoMes(d)}</b>
+                </button>
+              ))}
+              <button type="button" className="day" style={{ flexBasis: 40 }} aria-label="Próxima semana" onClick={() => irPara(somarDias(data, 7))}>
+                ›
+              </button>
+            </div>
+          )}
           <div className="seg" role="group" aria-label="Visualização">
             {visoes.map(([v, rotulo]) => (
               <button key={v} type="button" aria-pressed={visao === v} onClick={() => setVisao(v)}>
@@ -279,13 +314,26 @@ export function Agenda() {
                       <span className="small">{itens.length === 1 ? "1 consulta" : `${itens.length} consultas`}</span>
                     </div>
                     {itens.map((c) => (
-                      <div key={c.id} className="row" style={{ padding: "10px 16px", borderTop: "1px solid #DCE3EF" }}>
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="row"
+                        aria-pressed={c.id === selecionada}
+                        onClick={() => {
+                          setSelecionada(c.id);
+                          setFolha(true);
+                        }}
+                        style={{ width: "100%", padding: "10px 16px", border: 0, borderTop: "1px solid #DCE3EF", background: c.id === selecionada ? "#EEF3FF" : "#FFFFFF", textAlign: "left", cursor: "pointer", font: "inherit" }}
+                      >
                         <span className="mono" style={{ color: "#0B3A8F", width: 48 }}>
                           {c.hora}
                         </span>
-                        <b style={{ flex: 1 }}>{c.animal.nome}</b>
-                        <span className="small muted">{c.profissional.nome}</span>
-                      </div>
+                        <span style={{ flex: 1, textAlign: "left" }}>
+                          <b style={{ display: "block" }}>{c.animal.nome}</b>
+                          <span className="small muted">{c.tutor.nome} · {c.profissional.nome}</span>
+                        </span>
+                        <span className="small" style={{ fontWeight: 700, color: corDoStatus(c.status).color }}>{c.status}</span>
+                      </button>
                     ))}
                   </section>
                 );
@@ -297,30 +345,45 @@ export function Agenda() {
             <>
               <div className="chips">
                 {profissionais.map((p) => (
-                  <button key={p.id} type="button" className="chip" aria-pressed={p.id === prof?.id} onClick={() => setProfSelecionado(p.id)}>
+                  <button key={p.id} type="button" className="chip" aria-pressed={p.id === prof?.id} onClick={() => selecionarProfissional(p.id)}>
                     {p.nome}
                   </button>
                 ))}
               </div>
+              <div className="seg" role="group" aria-label="Período das consultas">
+                <button type="button" aria-pressed={escopoProfissional === "dia"} onClick={() => mudarEscopoProfissional("dia")}>Dia selecionado</button>
+                <button type="button" aria-pressed={escopoProfissional === "futuras"} onClick={() => mudarEscopoProfissional("futuras")}>Todas futuras</button>
+              </div>
+              {erroAgendaFuturaDoProf && <div role="alert" className="erro">{erroAgendaFuturaDoProf}</div>}
+              {escopoProfissional === "futuras" && carregandoAgendaFuturaDoProf && !agendaFuturaDoProf && (
+                <p className="vazio">Carregando consultas futuras…</p>
+              )}
               {doProf.length === 0 ? (
-                dados && semConsultas
+                escopoProfissional === "futuras" ? agendaFuturaDoProf && semConsultasFuturas : dados && semConsultas
               ) : (
                 <section className="card">
                   <ul className="list">
                     {doProf.map((c) => (
-                      <li key={c.id} className="li">
-                        <span className="mono" style={{ color: "#0B3A8F", width: 48 }}>
-                          {c.hora}
-                        </span>
-                        <span style={{ flex: 1 }}>
-                          <b>{c.animal.nome}</b>
-                          <span className="small muted" style={{ display: "block" }}>
-                            {c.tutor.nome}
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          className="appt"
+                          aria-pressed={c.id === selecionada}
+                          onClick={() => {
+                            setSelecionada(c.id);
+                            setFolha(true);
+                          }}
+                          style={{ background: corDoStatus(c.status).background, border: c.id === selecionada ? "2px solid #0B3A8F" : "1px solid #DCE3EF" }}
+                        >
+                          <span className="mono" style={{ color: "#0B3A8F", fontSize: 15, width: 48 }}>
+                            {c.hora}
                           </span>
-                        </span>
-                        <span className="pill" style={corDoStatus(c.status)}>
-                          {c.status}
-                        </span>
+                          <span style={{ flex: 1, minWidth: 0, textAlign: "left", color: corDoStatus(c.status).color }}>
+                            <b style={{ display: "block", fontSize: 16 }}>{c.animal.nome}</b>
+                            <span className="small">{escopoProfissional === "futuras" ? `${dataCurta(c.data)} · ` : ""}{c.tutor.nome}</span>
+                          </span>
+                          <span className="small" style={{ fontWeight: 700, color: corDoStatus(c.status).color }}>{c.status}</span>
+                        </button>
                       </li>
                     ))}
                   </ul>
@@ -365,7 +428,13 @@ export function Agenda() {
         <div>
           <div className="eyebrow">REQ 09 · Consultar agenda</div>
           <h1>{titulo}</h1>
-          <p className="sub">{visao === "semana" ? `Semana de ${dataCurta(segunda)} a ${dataBR(somarDias(segunda, 5))}` : dataPorExtenso(data)}</p>
+          <p className="sub">
+            {visao === "semana"
+              ? `Semana de ${dataCurta(segunda)} a ${dataBR(somarDias(segunda, 5))}`
+              : visao === "prof" && escopoProfissional === "futuras"
+                ? `Todas as consultas futuras${prof ? ` de ${prof.nome}` : ""}`
+                : dataPorExtenso(data)}
+          </p>
         </div>
         {permissoes.agendar && (
           <Link href={`/agenda/novo?data=${data}`} className="d-btn">
@@ -383,16 +452,20 @@ export function Agenda() {
           ))}
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button type="button" className="d-sq" aria-label={visao === "semana" ? "Semana anterior" : "Dia anterior"} onClick={() => irPara(somarDias(data, -passo))}>
-            ‹
-          </button>
-          <button type="button" className="d-btn2" style={{ padding: "0 16px" }} onClick={() => irPara(hoje)}>
-            Hoje
-          </button>
-          <button type="button" className="d-sq" aria-label={visao === "semana" ? "Próxima semana" : "Próximo dia"} onClick={() => irPara(somarDias(data, passo))}>
-            ›
-          </button>
-          <input type="date" className="inp" aria-label="Ir para a data" style={{ width: 160 }} value={data} onChange={(e) => e.target.value && irPara(e.target.value)} />
+          {!(visao === "prof" && escopoProfissional === "futuras") && (
+            <>
+              <button type="button" className="d-sq" aria-label={visao === "semana" ? "Semana anterior" : "Dia anterior"} onClick={() => irPara(somarDias(data, -passo))}>
+                ‹
+              </button>
+              <button type="button" className="d-btn2" style={{ padding: "0 16px" }} onClick={() => irPara(hoje)}>
+                Hoje
+              </button>
+              <button type="button" className="d-sq" aria-label={visao === "semana" ? "Próxima semana" : "Próximo dia"} onClick={() => irPara(somarDias(data, passo))}>
+                ›
+              </button>
+              <input type="date" className="inp" aria-label="Ir para a data" style={{ width: 160 }} value={data} onChange={(e) => e.target.value && irPara(e.target.value)} />
+            </>
+          )}
           <span className="mono muted" style={{ fontSize: 12, marginLeft: 8 }}>
             {atualizadoAs ? `Atualizado às ${atualizadoAs}` : "Carregando…"}
           </span>
@@ -473,13 +546,20 @@ export function Agenda() {
                         <div style={{ fontSize: 13 }}>{itens.length === 1 ? "1 consulta" : `${itens.length} consultas`}</div>
                       </button>
                       {itens.map((c) => (
-                        <div key={c.id} style={{ padding: "10px 12px", borderTop: "1px solid #DCE3EF", fontSize: 14 }}>
+                        <button
+                          key={c.id}
+                          type="button"
+                          className="d-cons"
+                          aria-pressed={c.id === selecionada}
+                          onClick={() => setSelecionada(c.id)}
+                          style={{ display: "block", minHeight: 0, padding: "10px 12px", border: 0, borderTop: "1px solid #DCE3EF", borderRadius: 0, ...corDoStatus(c.status), fontSize: 14 }}
+                        >
                           <span className="mono" style={{ color: "#0B3A8F" }}>
                             {c.hora}
                           </span>{" "}
                           <strong>{c.animal.nome}</strong>
-                          <div style={{ fontSize: 13, color: "#5B6782" }}>{c.profissional.nome}</div>
-                        </div>
+                          <span style={{ fontSize: 13 }}>{c.tutor.nome} · {c.profissional.nome} · {c.status}</span>
+                        </button>
                       ))}
                     </div>
                   );
@@ -494,25 +574,44 @@ export function Agenda() {
                 <span className="lbl">Profissional</span>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {profissionais.map((p) => (
-                    <button key={p.id} type="button" className="d-chip" aria-pressed={p.id === prof?.id} onClick={() => setProfSelecionado(p.id)}>
+                    <button key={p.id} type="button" className="d-chip" aria-pressed={p.id === prof?.id} onClick={() => selecionarProfissional(p.id)}>
                       {p.nome}
                     </button>
                   ))}
                 </div>
               </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="lbl">Período</span>
+                <div role="group" aria-label="Período das consultas" className="d-seg">
+                  <button type="button" aria-pressed={escopoProfissional === "dia"} onClick={() => mudarEscopoProfissional("dia")}>Dia selecionado</button>
+                  <button type="button" aria-pressed={escopoProfissional === "futuras"} onClick={() => mudarEscopoProfissional("futuras")}>Todas futuras</button>
+                </div>
+              </div>
+              {erroAgendaFuturaDoProf && <div role="alert" className="danger">{erroAgendaFuturaDoProf}</div>}
+              {escopoProfissional === "futuras" && carregandoAgendaFuturaDoProf && !agendaFuturaDoProf && (
+                <p className="d-vazio">Carregando consultas futuras…</p>
+              )}
               {doProf.length === 0 ? (
-                dados && semConsultas
+                escopoProfissional === "futuras" ? agendaFuturaDoProf && semConsultasFuturas : dados && semConsultas
               ) : (
                 <ul className="d-list" style={{ margin: 0 }}>
                   {doProf.map((c) => (
-                    <li key={c.id} style={{ flexWrap: "nowrap" }}>
-                      <span className="h">{c.hora}</span>
-                      <span style={{ flex: "1 1 auto" }}>
-                        <strong>{c.animal.nome}</strong> · {c.tutor.nome}
-                      </span>
-                      <span className="pill" style={corDoStatus(c.status)}>
-                        {c.status}
-                      </span>
+                    <li key={c.id} style={{ padding: 0 }}>
+                      <button
+                        type="button"
+                        className="d-cons"
+                        aria-pressed={c.id === selecionada}
+                        onClick={() => setSelecionada(c.id)}
+                        style={{ display: "flex", alignItems: "center", gap: 16, minHeight: 50, padding: "10px 12px", ...corDoStatus(c.status) }}
+                      >
+                        <span className="h">{escopoProfissional === "futuras" ? `${dataCurta(c.data)} · ${c.hora}` : c.hora}</span>
+                        <span style={{ flex: "1 1 auto" }}>
+                          <strong>{c.animal.nome}</strong> · {c.tutor.nome}
+                        </span>
+                        <span className="pill" style={corDoStatus(c.status)}>
+                          {c.status}
+                        </span>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -521,23 +620,21 @@ export function Agenda() {
           )}
         </section>
 
-        {visao === "dia" && (
-          <aside aria-label="Detalhes da consulta" className="d-card d-narrow" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <div className="eyebrow t">Consulta selecionada</div>
-            {detalhe ? (
-              <>
-                <h2 className="h2" style={{ fontSize: 26 }}>
-                  {detalhe.animal.nome}
-                </h2>
-                {corpoDoDetalhe}
-              </>
-            ) : (
-              <p className="muted" style={{ margin: 0 }}>
-                Clique em uma consulta da grade para ver os detalhes.{permissoes.agendar ? " Os horários marcados como “Livre” abrem um novo agendamento." : ""}
-              </p>
-            )}
-          </aside>
-        )}
+        <aside aria-label="Detalhes da consulta" className="d-card d-narrow" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="eyebrow t">Consulta selecionada</div>
+          {detalhe ? (
+            <>
+              <h2 className="h2" style={{ fontSize: 26 }}>
+                {detalhe.animal.nome}
+              </h2>
+              {corpoDoDetalhe}
+            </>
+          ) : (
+            <p className="muted" style={{ margin: 0 }}>
+              Clique em uma consulta da agenda para ver os detalhes.{permissoes.agendar ? " Os horários marcados como “Livre” abrem um novo agendamento." : ""}
+            </p>
+          )}
+        </aside>
       </div>
       {confirmacaoCancelamento}
     </>

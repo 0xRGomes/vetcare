@@ -1,7 +1,7 @@
 // Camada de Aplicação (app.agendamento) — REQ 09: Consultar agenda.
 
 import { dataValida, diaDaSemana, somarDias } from "@/lib/datas";
-import { ErroAcessoNegado, ErroDeValidacao } from "@/server/domain/erros";
+import { ErroAcessoNegado, ErroDeValidacao, ErroNaoEncontrado } from "@/server/domain/erros";
 import type { ConsultaDetalhada, Profissional, Sessao } from "@/server/domain/modelos";
 import type { ConsultaRepository, ProfissionalRepository, Relogio, AnimalRepository, TutorRepository } from "@/server/domain/repositorios";
 import type { RBACManager } from "@/server/app/auth/RBACManager";
@@ -61,6 +61,32 @@ export class AgendaQueryEngine {
       ate,
       profissionais: restricao ? todos.filter((p) => p.id === restricao) : todos,
       consultas: this.consultas.listar({ de, ate, profissionalId: filtro }),
+    };
+  }
+
+  consultarTodasFuturasDoProfissional(sessao: Sessao, profissionalId?: number): Agenda {
+    this.rbac.exigir(sessao, "agenda", "ler");
+    const restricao = this.rbac.restricaoDeAgenda(sessao);
+    if (restricao && profissionalId !== undefined && profissionalId !== restricao) {
+      throw new ErroAcessoNegado("Você só pode consultar a própria agenda.");
+    }
+
+    const alvo = restricao ?? profissionalId;
+    if (alvo === undefined || !Number.isInteger(alvo) || alvo <= 0) {
+      throw new ErroDeValidacao("Selecione um veterinário para consultar as próximas consultas.");
+    }
+    const profissional = this.profissionais.buscarPorId(alvo);
+    if (!profissional) throw new ErroNaoEncontrado("Veterinário não encontrado.");
+
+    const agora = this.relogio.agora();
+    const consultas = this.consultas.listarFuturasDoProfissional(alvo, agora.data, agora.hora);
+    return {
+      hoje: agora.data,
+      horaAtual: agora.hora,
+      de: agora.data,
+      ate: consultas.at(-1)?.data ?? agora.data,
+      profissionais: [profissional],
+      consultas,
     };
   }
 

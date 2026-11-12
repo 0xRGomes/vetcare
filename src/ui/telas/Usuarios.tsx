@@ -55,17 +55,18 @@ interface Resultado {
   senha?: { nome: string; valor: string };
 }
 
-function FormUsuario({ usuario, painel, euMesmo, celular, aoConcluir, aoCancelar }: { usuario: Usuario | null; painel: Painel; euMesmo: boolean; celular: boolean; aoConcluir: (r: Resultado) => void; aoCancelar: () => void }) {
+function FormUsuario({ usuario, euMesmo, celular, aoConcluir, aoCancelar }: { usuario: Usuario | null; euMesmo: boolean; celular: boolean; aoConcluir: (r: Resultado) => void; aoCancelar: () => void }) {
   const novo = usuario === null;
   const [nome, setNome] = useState(usuario?.nome ?? "");
   const [email, setEmail] = useState(usuario?.email ?? "");
   const [perfil, setPerfil] = useState<Perfil>(usuario?.perfil ?? "RECEPCIONISTA");
-  const [profissionalId, setProfissionalId] = useState<number | "">(usuario?.profissionalId ?? "");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const titulo = novo ? "Novo usuário" : "Editar usuário";
-  const veterinarios = painel.profissionais.filter((p) => p.livre || p.id === usuario?.profissionalId);
+  const perfisDoFormulario = usuario?.perfil === "VETERINARIO"
+    ? PERFIS.filter((p) => p.id === "VETERINARIO")
+    : PERFIS.filter((p) => p.id !== "VETERINARIO");
 
   async function executar(acao: () => Promise<Resultado>) {
     setOcupado(true);
@@ -81,8 +82,7 @@ function FormUsuario({ usuario, painel, euMesmo, celular, aoConcluir, aoCancelar
   function salvar(e: FormEvent) {
     e.preventDefault();
     if (!nome.trim() || !email.trim()) return setErro("Preencha nome e e-mail para cadastrar.");
-    if (perfil === "VETERINARIO" && !profissionalId) return setErro("Selecione o veterinário a que este usuário corresponde.");
-    const corpo = { nome, email, perfil, profissionalId: profissionalId || null };
+    const corpo = { nome, email, perfil };
     void executar(async () => {
       if (!novo) {
         await api(`/api/usuarios/${usuario.id}`, { metodo: "PUT", corpo });
@@ -123,7 +123,7 @@ function FormUsuario({ usuario, painel, euMesmo, celular, aoConcluir, aoCancelar
         <legend className="lbl" style={{ marginBottom: 6, padding: 0 }}>
           Perfil de acesso
         </legend>
-        {PERFIS.map((p) => (
+        {perfisDoFormulario.map((p) => (
           <button key={p.id} type="button" className={celular ? "opt perfil" : "d-perfil"} aria-pressed={p.id === perfil} disabled={euMesmo && p.id !== perfil} onClick={() => setPerfil(p.id)}>
             <i />
             <span>
@@ -132,21 +132,16 @@ function FormUsuario({ usuario, painel, euMesmo, celular, aoConcluir, aoCancelar
           </button>
         ))}
       </fieldset>
-      {perfil === "VETERINARIO" && (
-        <div className="field">
-          <label className="lbl" htmlFor="uv">
-            Veterinário correspondente
-          </label>
-          <select className="inp" id="uv" value={profissionalId} onChange={(e) => setProfissionalId(Number(e.target.value) || "")}>
-            <option value="">Selecione…</option>
-            {veterinarios.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.nome}
-              </option>
-            ))}
-          </select>
-          <span className="small muted">Define de quem é a “própria agenda” que este usuário enxerga.</span>
-        </div>
+      {novo && (
+        <span className="small muted">
+          Contas veterinárias e suas agendas são criadas junto com o cadastro do profissional na tela Veterinários.
+        </span>
+      )}
+      {usuario?.perfil === "VETERINARIO" && (
+        <span className="small muted">
+          O perfil e a agenda são gerenciados em Veterinários.{" "}
+          <Link href="/veterinarios" className="link" style={{ color: "var(--royal)", textDecoration: "underline" }}>Abrir cadastros</Link>
+        </span>
       )}
       {euMesmo && <span className="small muted">Este é o seu usuário: o perfil e o acesso não podem ser alterados por você mesmo.</span>}
       {erro && (
@@ -292,7 +287,7 @@ export function Usuarios() {
   );
 
   const formulario = p && (novo || usuario) && (
-    <FormUsuario key={caminho + (usuario?.status ?? "")} usuario={novo ? null : usuario} painel={p} euMesmo={usuario?.id === sessao.usuarioId} celular={celular} aoConcluir={concluir} aoCancelar={fechar} />
+    <FormUsuario key={caminho + (usuario?.status ?? "")} usuario={novo ? null : usuario} euMesmo={usuario?.id === sessao.usuarioId} celular={celular} aoConcluir={concluir} aoCancelar={fechar} />
   );
   const naoEncontrado = !!id && !!p && !usuario;
 

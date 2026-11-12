@@ -3,7 +3,7 @@
 Sistema de gestão para clínica veterinária — **Trabalho II (Etapa 2): implementação**.
 Disciplina Engenharia de Software I · Instituto de Computação · UFBA · Profa. Dra. Larissa Barbosa Leôncio Pinheiro.
 
-Esta etapa implementa 7 dos 17 requisitos funcionais do Documento de Requisitos (41,2%), formando um fluxo completo: o administrador cadastra quem acessa o sistema; a recepção entra, cadastra o tutor e o animal, agenda ou cancela a consulta e a vê na agenda.
+Esta etapa implementa 8 dos 17 requisitos funcionais do Documento de Requisitos (47,1%), formando um fluxo completo: a administração cadastra funcionários e veterinários; a recepção cadastra tutores e animais, agenda ou cancela consultas e acompanha tudo pela agenda.
 
 | Requisito | Funcionalidade | Tela |
 | --- | --- | --- |
@@ -11,6 +11,7 @@ Esta etapa implementa 7 dos 17 requisitos funcionais do Documento de Requisitos 
 | REQ 02 | Autenticar usuário | `/login` e `/senha` |
 | REQ 04 | Manter tutor | `/tutores`, `/tutores/novo`, `/tutores/:id` |
 | REQ 05 | Manter animal | `/tutores/:id/animais/novo` (ficha do tutor) |
+| REQ 06 | Manter veterinário | `/veterinarios` |
 | REQ 07 | Agendar consulta | `/agenda/novo` |
 | REQ 08 | Cancelar consulta | `/agenda` |
 | REQ 09 | Consultar agenda | `/agenda` e `/inicio` |
@@ -40,7 +41,7 @@ O acesso é sempre por e-mail e senha. O banco começa com três contas, uma de 
 | Recepcionista | `marina.lopes@clinica.com.br` | Cadastros de tutores e animais, agendamento e agenda completa |
 | Veterinário | `paulo.reis@clinica.com.br` | Consulta a própria agenda e lê os cadastros |
 
-Os demais usuários são criados pelo administrador em **Usuários e perfis**. Cada usuário novo recebe uma senha provisória e define a própria senha no primeiro acesso. Os veterinários da clínica são pré-cadastrados, porque REQ 06 (Manter veterinário) ficou fora desta etapa — ver [ADR-008](docs/adrs/ADR-008-selecao-escopo-etapa-2.md).
+Os demais usuários são criados pelo administrador em **Usuários e perfis**. Cada usuário novo recebe uma senha provisória e define a própria senha no primeiro acesso. Em **Veterinários**, a administração cadastra os dados profissionais e o sistema cria a conta vinculada com perfil Veterinário e senha provisória.
 
 ### Roteiro de demonstração
 
@@ -91,7 +92,8 @@ Todas as rotas, exceto o login, exigem sessão válida.
 | `GET` · `PUT` · `DELETE /api/tutores/:id` | REQ 04 | Consultar, alterar e excluir tutor |
 | `POST /api/tutores/:id/animais` | REQ 05 | Cadastrar animal vinculado ao tutor |
 | `PUT` · `DELETE /api/animais/:id` | REQ 05 | Alterar e excluir animal |
-| `GET /api/profissionais` | — | Veterinários disponíveis para agendamento |
+| `GET /api/profissionais` | REQ 06 | Listar veterinários ativos para leitura e agendamento |
+| `POST /api/profissionais` · `PUT` · `DELETE /api/profissionais/:id` | REQ 06 | Cadastrar, editar e remover veterinário da agenda |
 | `GET /api/agenda/horarios?profissional=&data=` | REQ 07 | Horários livres e ocupados |
 | `POST /api/consultas` | REQ 07 | Agendar consulta (409 em caso de conflito) |
 | `DELETE /api/consultas?id=` | REQ 08 | Cancelar consulta futura sem remover o histórico |

@@ -44,6 +44,16 @@ export interface AuditoriaRepository {
 export interface ProfissionalRepository {
   listar(): Profissional[];
   buscarPorId(id: number): Profissional | null;
+  buscarPorCrmv(crmv: string): Profissional | null;
+  criar(dados: DadosProfissional): number;
+  atualizar(id: number, dados: DadosProfissional): void;
+  desativar(id: number): void;
+}
+
+export type DadosProfissional = Omit<Profissional, "id">;
+
+export interface TransacaoRepository {
+  executar<T>(operacao: () => T): T;
 }
 
 export type DadosTutor = Omit<Tutor, "id" | "criadoEm">;
@@ -76,6 +86,7 @@ export interface FiltroAgenda {
 
 export interface ConsultaRepository {
   listar(filtro: FiltroAgenda): ConsultaDetalhada[];
+  listarFuturasDoProfissional(profissionalId: number, hoje: string, horaAtual: string): ConsultaDetalhada[];
   /** Horários ativos (não cancelados) de um profissional em uma data. */
   horariosOcupados(profissionalId: number, data: string): string[];
   existeParaAnimal(animalId: number, data: string, hora: string): boolean;
@@ -83,6 +94,8 @@ export interface ConsultaRepository {
   criar(dados: Omit<Consulta, "id" | "status">, criadoPor: number, criadoEm: string): number;
   buscarPorId(id: number): ConsultaDetalhada | null;
   cancelar(id: number): boolean;
+  temConsultasFuturasDoProfissional(profissionalId: number, aPartirDe: string, hora: string): boolean;
+  temConsultasFuturasForaDoHorario(profissionalId: number, aPartirDe: string, hora: string, dias: number[], horaInicio: string, horaFim: string): boolean;
   cancelarFuturasDoTutor(tutorId: number, aPartirDe: string, hora: string): number;
   cancelarFuturasDoAnimal(animalId: number, aPartirDe: string, hora: string): number;
 }

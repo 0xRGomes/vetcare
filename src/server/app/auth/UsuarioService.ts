@@ -38,11 +38,8 @@ export class UsuarioService {
   /** Tudo o que a tela "Usuários e perfis" exibe. */
   painel(sessao: Sessao, busca?: string) {
     this.rbac.exigir(sessao, "usuarios", "ler");
-    const vinculados = new Set(this.usuarios.listar().map((u) => u.profissionalId));
     return {
       usuarios: this.usuarios.listar(busca).map((u) => this.paraDTO(u)),
-      /** Veterinários cadastrados, indicando os que ainda não têm usuário. */
-      profissionais: this.profissionais.listar().map((p) => ({ id: p.id, nome: p.nome, livre: !vinculados.has(p.id) })),
       matriz: (Object.keys(MATRIZ_DE_PERMISSOES) as Modulo[]).map((m) => ({ modulo: ROTULO_DO_MODULO[m], niveis: MATRIZ_DE_PERMISSOES[m] })),
       auditoria: this.auditoria.recentes(6),
       agora: this.relogio.agora().instante.toISOString(),
@@ -52,6 +49,9 @@ export class UsuarioService {
   /** Cria o usuário com uma senha provisória, devolvida uma única vez para o administrador repassar. */
   async cadastrar(sessao: Sessao, entrada: Record<string, unknown>): Promise<{ usuario: UsuarioDTO; senhaProvisoria: string }> {
     this.rbac.exigir(sessao, "usuarios", "escrever");
+    if (entrada.perfil === "VETERINARIO") {
+      throw new ErroDeConflito("Cadastre veterinários na tela Veterinários; a conta de acesso é criada junto com o cadastro.");
+    }
     const dados = this.validar(entrada);
     const senhaProvisoria = this.senhas.gerarProvisoria();
     const id = this.usuarios.criar(dados, await this.senhas.gerar(senhaProvisoria));
@@ -89,6 +89,9 @@ export class UsuarioService {
   reativar(sessao: Sessao, id: number): UsuarioDTO {
     this.rbac.exigir(sessao, "usuarios", "escrever");
     const usuario = this.existente(id);
+    if (usuario.perfil === "VETERINARIO" && usuario.profissionalId && !this.profissionais.buscarPorId(usuario.profissionalId)) {
+      throw new ErroDeConflito("O cadastro deste veterinário está inativo. Reative o veterinário antes de reativar o acesso.");
+    }
     this.usuarios.definirAtivo(id, true);
     this.registrar(sessao, `reativou o acesso de ${usuario.nome}`);
     return this.paraDTO(this.existente(id));
@@ -128,6 +131,12 @@ export class UsuarioService {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ErroDeValidacao("Informe um e-mail válido.", "email");
     if (!PERFIS.includes(e.perfil as Perfil)) throw new ErroDeValidacao("Selecione o perfil de acesso.", "perfil");
     const perfil = e.perfil as Perfil;
+    if (perfil === "VETERINARIO" && (!atual || atual.perfil !== "VETERINARIO")) {
+      throw new ErroDeConflito("Cadastre veterinários na tela Veterinários; a conta de acesso é criada junto com o cadastro.");
+    }
+    if (atual?.perfil === "VETERINARIO" && perfil !== "VETERINARIO") {
+      throw new ErroDeConflito("O perfil e a agenda deste usuário são gerenciados no cadastro de Veterinários.");
+    }
 
     const comMesmoEmail = this.usuarios.buscarPorEmail(email);
     if (comMesmoEmail && comMesmoEmail.id !== atual?.id) throw new ErroDeConflito("Já existe um usuário com este e-mail.");
@@ -135,9 +144,9 @@ export class UsuarioService {
     // O perfil Veterinário enxerga a "própria agenda": precisa estar ligado a um veterinário cadastrado.
     let profissionalId: number | null = null;
     if (perfil === "VETERINARIO") {
-      profissionalId = Number(e.profissionalId);
-      if (!Number.isInteger(profissionalId) || !this.profissionais.buscarPorId(profissionalId)) {
-        throw new ErroDeValidacao("Selecione o veterinário a que este usuário corresponde.", "profissionalId");
+      profissionalId = atual?.profissionalId ?? null;
+      if (profissionalId === null || !Number.isInteger(profissionalId)) {
+        throw new ErroDeConflito("Este usuário não tem um veterinário vinculado.");
       }
       const dono = this.usuarios.buscarPorProfissional(profissionalId);
       if (dono && dono.id !== atual?.id) throw new ErroDeConflito(`Este veterinário já está vinculado ao usuário ${dono.nome}.`);

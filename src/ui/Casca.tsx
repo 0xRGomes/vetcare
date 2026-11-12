@@ -27,13 +27,14 @@ export function useCasca(): Contexto {
   return ctx;
 }
 
-type Chave = "inicio" | "agenda" | "novo" | "tutores" | "usuarios";
+type Chave = "inicio" | "agenda" | "novo" | "tutores" | "veterinarios" | "usuarios";
 
 const ITENS: Record<Chave, { rotulo: string; curto: string; href: string; icone: string }> = {
   inicio: { rotulo: "Início", curto: "Início", href: "/inicio", icone: CAMINHOS.inicio },
   agenda: { rotulo: "Agenda", curto: "Agenda", href: "/agenda", icone: CAMINHOS.agenda },
   novo: { rotulo: "Novo agendamento", curto: "Agendar", href: "/agenda/novo", icone: CAMINHOS.novo },
   tutores: { rotulo: "Tutores e animais", curto: "Tutores", href: "/tutores", icone: CAMINHOS.tutores },
+  veterinarios: { rotulo: "Veterinários", curto: "Veterinários", href: "/veterinarios", icone: CAMINHOS.veterinarios },
   usuarios: { rotulo: "Usuários e perfis", curto: "Usuários", href: "/usuarios", icone: CAMINHOS.usuarios },
 };
 
@@ -43,6 +44,7 @@ function itensDoMenu(p: Permissoes): Chave[] {
   chaves.push("agenda");
   if (p.agendar) chaves.push("novo");
   chaves.push("tutores");
+  chaves.push("veterinarios");
   if (p.usuarios) chaves.push("usuarios");
   return chaves;
 }
@@ -51,6 +53,7 @@ function ativa(caminho: string): Chave {
   if (caminho.startsWith("/agenda/novo")) return "novo";
   if (caminho.startsWith("/agenda")) return "agenda";
   if (caminho.startsWith("/tutores")) return "tutores";
+  if (caminho.startsWith("/veterinarios")) return "veterinarios";
   if (caminho.startsWith("/usuarios")) return "usuarios";
   return "inicio";
 }
@@ -135,7 +138,7 @@ export function Casca({ sessao, permissoes, children }: { sessao: Sessao; permis
 function AbasDoCelular({ chaves, atual, sessao, perfil }: { chaves: Chave[]; atual: Chave; sessao: Sessao; perfil: string }) {
   const [aberto, setAberto] = useState(false);
   // Como no protótipo: o que não cabe na barra fica no painel "Mais", junto com "Sair".
-  const noPainel: Chave[] = ["novo", "usuarios"];
+  const noPainel: Chave[] = ["novo", "veterinarios", "usuarios"];
   const abas = chaves.filter((k) => !noPainel.includes(k));
   const mais = chaves.filter((k) => noPainel.includes(k));
   const emMais = mais.includes(atual);

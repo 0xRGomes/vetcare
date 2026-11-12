@@ -1,6 +1,6 @@
 # Requisitos da Sprint — Etapa 2
 
-O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **7 deles (41,2%)**, escolhidos para formar um fluxo completo, do cadastro de quem acessa o sistema até a consulta na agenda. A justificativa da seleção está na [ADR-008](adrs/ADR-008-selecao-escopo-etapa-2.md).
+O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **8 deles (47,1%)**, escolhidos para formar um fluxo completo, do cadastro de quem acessa o sistema até a consulta na agenda. A justificativa da seleção está na [ADR-008](adrs/ADR-008-selecao-escopo-etapa-2.md).
 
 ## Requisitos implementados
 
@@ -8,7 +8,7 @@ O VetCare tem 17 requisitos funcionais. Esta Sprint implementa **7 deles (41,2%)
 
 O administrador inclui, altera, desativa e consulta quem acessa o sistema e com qual perfil.
 
-- Nome, e-mail e perfil são obrigatórios; o e-mail não pode se repetir. O perfil Veterinário é ligado a um veterinário cadastrado, o que define a agenda que ele enxerga.
+- Nome, e-mail e perfil são obrigatórios; o e-mail não pode se repetir. Nesta tela, o administrador cadastra perfis Administrador e Recepcionista. A conta Veterinário e sua agenda são criadas juntas na tela Veterinários (ADR-012).
 - O usuário novo recebe uma senha provisória, exibida uma única vez ao administrador, e é obrigado a definir a própria senha no primeiro acesso.
 - "Excluir acesso" desativa o usuário e encerra a sessão dele na hora; o que ele registrou permanece. O acesso pode ser reativado.
 - O administrador pode gerar nova senha provisória, o que também desfaz o bloqueio por tentativas.
@@ -46,6 +46,16 @@ A recepção cadastra, altera e exclui animais na ficha do tutor.
 - Depois de cadastrar um tutor, o formulário de animal abre na própria ficha.
 - A exclusão pede confirmação e cancela as consultas futuras do animal.
 
+### REQ 06 — Manter veterinário
+
+A administração cadastra, consulta, altera e remove veterinários da agenda.
+
+- Nome, CRMV, especialidade, dias e horários de atendimento são obrigatórios; o CRMV não pode se repetir.
+- Ao cadastrar um veterinário, o sistema cria uma conta vinculada com perfil Veterinário, e-mail e senha provisória que deve ser informada ao profissional.
+- A alteração do cadastro atualiza também o nome da conta vinculada.
+- A remoção desativa o cadastro e o acesso, preservando o histórico; consultas futuras devem ser canceladas ou remanejadas antes.
+- Recepção e veterinários podem consultar a equipe, mas somente a administração pode manter cadastros.
+
 ### REQ 07 — Agendar consulta
 
 A recepção agenda uma consulta escolhendo tutor, animal, veterinário, data e horário.
@@ -80,6 +90,7 @@ Recepção e administração consultam a agenda da clínica; o veterinário cons
 | REQ 02 | `/login`, `/senha` | `/api/auth/login`, `/api/auth/logout`, `/api/auth/sessao`, `/api/auth/senha` | `auth`: `AuthService`, `TokenSessionService`, `RBACManager` | "REQ 02 — Autenticar usuário" |
 | REQ 04 | `/tutores` | `/api/tutores`, `/api/tutores/:id` | `cadastros`: `TutorService` | "REQ 04 — Manter tutor" |
 | REQ 05 | `/tutores` | `/api/tutores/:id/animais`, `/api/animais/:id` | `cadastros`: `AnimalService` | "REQ 05 — Manter animal" |
+| REQ 06 | `/veterinarios` | `/api/profissionais` | `cadastros`: `ProfissionalService` | "REQ 06 — Manter veterinário" |
 | REQ 07 | `/agenda/novo` | `/api/consultas`, `/api/agenda/horarios`, `/api/profissionais` | `agendamento`: `AgendamentoService`, `SlotConflictManager` | "REQ 07 — Agendar consulta" |
 | REQ 08 | `/agenda` | `DELETE /api/consultas?id=` | `agendamento`: `AgendamentoService` | "REQ 08 — Cancelar consulta" |
 | REQ 09 | `/agenda`, `/inicio` | `/api/agenda`, `/api/inicio` | `agendamento`: `AgendaQueryEngine` | "REQ 09 — Consultar agenda" |
@@ -95,7 +106,7 @@ Os testes estão em `tests/servicos.test.ts` e rodam com `npm test`.
 | REQ 03 | Recuperar senha | Não implementado |
 | **REQ 04** | **Manter tutor** | **Implementado** |
 | **REQ 05** | **Manter animal** | **Implementado** |
-| REQ 06 | Manter veterinário | Não implementado — veterinários pré-cadastrados |
+| **REQ 06** | **Manter veterinário** | **Implementado** |
 | **REQ 07** | **Agendar consulta** | **Implementado** |
 | **REQ 08** | **Cancelar consulta** | **Implementado** |
 | **REQ 09** | **Consultar agenda** | **Implementado** |
